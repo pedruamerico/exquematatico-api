@@ -3,6 +3,7 @@
 # DECISÃO: sqlite3 puro (sem SQLAlchemy) — modelo com duas tabelas não justifica ORM.
 """
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "ixquematatico.db"
@@ -29,14 +30,23 @@ CREATE TABLE IF NOT EXISTS posicao (
 """
 
 
-def get_connection() -> sqlite3.Connection:
+@contextmanager
+def conexao():
+    """Conexão com transação: commit ao sair sem erro, rollback com erro, sempre fecha.
+
+    O context manager nativo do sqlite3 só controla a transação e deixa a conexão aberta.
+    """
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     # Sem este PRAGMA o SQLite ignora o ON DELETE CASCADE declarado no schema.
     conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def init_db() -> None:
-    with get_connection() as conn:
+    with conexao() as conn:
         conn.executescript(SCHEMA)
