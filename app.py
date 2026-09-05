@@ -1,4 +1,4 @@
-"""IxquemaTatico API - quadro tático de futebol. Rotas finas; regras em services.py."""
+"""ExquemaTatico API - quadro tático de futebol. Rotas finas; regras em services.py."""
 from typing import Optional
 
 from flask import jsonify, make_response, redirect
@@ -93,7 +93,7 @@ def _erro_validacao_pydantic(e: ValidationError):
 
 
 info = Info(
-    title="IxquemaTatico API",
+    title="ExquemaTatico API",
     version="1.0.0",
     description="Quadro tático de futebol: esquemas com 11 posições em coordenadas percentuais do campo.",
 )

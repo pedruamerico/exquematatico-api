@@ -1,11 +1,13 @@
-# IxquemaTatico API
+# ExquemaTatico API
 
-Backend do IxquemaTatico, um quadro tático de futebol digital. O usuário monta esquemas
+Backend do ExquemaTatico, um quadro tático de futebol digital. O usuário monta esquemas
 (formação, jogada, bola parada), posiciona 11 jogadores num campo e salva numa biblioteca
 pessoal. Esta API guarda esses esquemas em SQLite e os expõe por REST com documentação
 Swagger.
 
-O frontend fica em outro repositório: `ixquematatico-front`.
+O frontend fica em outro repositório: `exquematatico-front`.
+
+![Editor do ExquemaTatico consumindo esta API](docs/editor.png)
 
 ## Arquitetura
 
@@ -19,7 +21,7 @@ O frontend fica em outro repositório: `ixquematatico-front`.
   funcionar), schema e `init_db()`, executado automaticamente ao subir a API.
 - `seed.py`: opcional, cria dois esquemas de exemplo (um 4-3-3 ofensivo e um escanteio).
 
-O banco é o arquivo `ixquematatico.db`, criado ao lado de `app.py` na primeira execução.
+O banco é o arquivo `exquematatico.db`, criado ao lado de `app.py` na primeira execução.
 
 ### Modelo
 
