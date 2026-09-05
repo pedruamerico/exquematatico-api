@@ -126,3 +126,40 @@ def criar_esquema(payload) -> dict:
         )
         _inserir_posicoes(conn, cur.lastrowid, dados["posicoes"])
     return obter_esquema(cur.lastrowid)
+
+
+def _exigir_existente(conn, esquema_id: int) -> None:
+    if conn.execute("SELECT 1 FROM esquema WHERE id = ?", (esquema_id,)).fetchone() is None:
+        raise NaoEncontrado(f"Esquema {esquema_id} não encontrado.")
+
+
+def atualizar_esquema(esquema_id: int, payload) -> dict:
+    dados = validar_esquema(payload)
+    with conexao() as conn:
+        _exigir_existente(conn, esquema_id)
+        # criado_em não entra no UPDATE: o valor original é preservado.
+        conn.execute(
+            "UPDATE esquema SET nome = ?, formacao = ?, tipo = ?, anotacoes = ? WHERE id = ?",
+            (dados["nome"], dados["formacao"], dados["tipo"], dados["anotacoes"], esquema_id),
+        )
+        conn.execute("DELETE FROM posicao WHERE esquema_id = ?", (esquema_id,))
+        _inserir_posicoes(conn, esquema_id, dados["posicoes"])
+    return obter_esquema(esquema_id)
+
+
+def excluir_esquema(esquema_id: int) -> None:
+    with conexao() as conn:
+        _exigir_existente(conn, esquema_id)
+        # As posições caem pelo ON DELETE CASCADE (PRAGMA foreign_keys ligado em database.py).
+        conn.execute("DELETE FROM esquema WHERE id = ?", (esquema_id,))
+
+
+def duplicar_esquema(esquema_id: int) -> dict:
+    original = obter_esquema(esquema_id)
+    with conexao() as conn:
+        cur = conn.execute(
+            "INSERT INTO esquema (nome, formacao, tipo, anotacoes, criado_em) VALUES (?, ?, ?, ?, ?)",
+            (f"Cópia de {original['nome']}", original["formacao"], original["tipo"], original["anotacoes"], _agora_utc()),
+        )
+        _inserir_posicoes(conn, cur.lastrowid, original["posicoes"])
+    return obter_esquema(cur.lastrowid)

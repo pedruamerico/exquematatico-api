@@ -146,6 +146,24 @@ def criar(body: EsquemaIn):
     return jsonify(services.criar_esquema(body.model_dump())), 201
 
 
+@app.put("/esquemas/<int:id>", tags=[tag], summary="Substitui dados e posições de um esquema (criado_em preservado)",
+         responses={200: EsquemaCompleto, 400: Erro, 404: Erro})
+def atualizar(path: EsquemaPath, body: EsquemaIn):
+    return jsonify(services.atualizar_esquema(path.id, body.model_dump()))
+
+
+@app.delete("/esquemas/<int:id>", tags=[tag], summary="Exclui um esquema e suas posições", responses={204: None, 404: Erro})
+def excluir(path: EsquemaPath):
+    services.excluir_esquema(path.id)
+    return "", 204
+
+
+@app.post("/esquemas/<int:id>/duplicar", tags=[tag], summary="Cria uma cópia independente do esquema",
+          responses={201: EsquemaCompleto, 404: Erro})
+def duplicar(path: EsquemaPath):
+    return jsonify(services.duplicar_esquema(path.id)), 201
+
+
 init_db()
 
 if __name__ == "__main__":
