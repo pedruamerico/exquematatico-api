@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS esquema (
     nome      TEXT NOT NULL,
     formacao  TEXT NOT NULL,
     tipo      TEXT NOT NULL CHECK (tipo IN ('ofensivo', 'defensivo', 'bola_parada')),
-    anotacoes TEXT NOT NULL DEFAULT '',
+    anotacoes TEXT DEFAULT '',
     criado_em TEXT NOT NULL
 );
 

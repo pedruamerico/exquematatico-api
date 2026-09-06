@@ -4,6 +4,7 @@ from typing import Optional
 from flask import jsonify, make_response, redirect
 from flask_cors import CORS
 from flask_openapi3 import Info, OpenAPI, Tag
+from werkzeug.exceptions import HTTPException
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
 import services
@@ -87,9 +88,25 @@ def _erro_validacao_pydantic(e: ValidationError):
     # (11 posições, números únicos, faixas, textos obrigatórios) ficam em services.py.
     primeiro = e.errors()[0]
     campo = ".".join(str(p) for p in primeiro["loc"]) or "payload"
-    resp = make_response(jsonify({"erro": f"Payload inválido em '{campo}': {primeiro['msg']}."}))
+    motivo = MENSAGENS_PYDANTIC.get(primeiro["type"], "valor inválido")
+    resp = make_response(jsonify({"erro": f"Payload inválido em '{campo}': {motivo}."}))
     resp.status_code = 400
     return resp
+
+
+MENSAGENS_PYDANTIC = {
+    "missing": "campo obrigatório",
+    "model_attributes_type": "payload obrigatório",
+    "dict_type": "payload obrigatório",
+    "model_type": "esperado um objeto",
+    "list_type": "esperada uma lista",
+    "string_type": "esperado texto",
+    "int_type": "esperado um número inteiro",
+    "int_parsing": "esperado um número inteiro",
+    "int_from_float": "esperado um número inteiro",
+    "float_type": "esperado um número",
+    "float_parsing": "esperado um número",
+}
 
 
 info = Info(
@@ -120,9 +137,11 @@ def _nao_encontrado(e):
     return jsonify({"erro": str(e)}), 404
 
 
-@app.errorhandler(404)
-def _rota_inexistente(e):
-    return jsonify({"erro": "Rota não encontrada."}), 404
+@app.errorhandler(HTTPException)
+def _erro_http(e):
+    # Garante JSON também para 404 de rota, 405 e demais erros que o Flask responderia em HTML.
+    mensagens = {404: "Rota não encontrada.", 405: "Método não permitido nesta rota."}
+    return jsonify({"erro": mensagens.get(e.code, f"Erro HTTP {e.code}.")}), e.code
 
 
 @app.route("/openapi")
