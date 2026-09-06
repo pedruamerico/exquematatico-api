@@ -37,25 +37,39 @@ original e a duplicação gera um novo.
 
 ## Instalação e execução
 
-Requer Python 3.10 ou superior.
+Requer Python 3.10 ou superior. Sem Docker, sem banco externo: o SQLite é um arquivo criado
+automaticamente na primeira execução.
+
+Windows (PowerShell):
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\activate        # Linux/macOS: source .venv/bin/activate
+.venv\Scripts\activate
 pip install -r requirements.txt
+python seed.py     # opcional: cria dois esquemas de exemplo
 python app.py
 ```
 
-A API sobe em `http://localhost:5000`. Para dados de exemplo:
+Linux/macOS:
 
-```powershell
-python seed.py
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python seed.py     # opcional: cria dois esquemas de exemplo
+python app.py
 ```
+
+A API sobe em `http://localhost:5001`. A porta 5001 foi escolhida porque no macOS o AirPlay
+Receiver ocupa a 5000 por padrão. Para usar outra porta, altere a última linha de `app.py` e a
+constante `API_BASE_URL` em `js/api.js` no frontend.
+
+Se `python -m venv` falhar no Ubuntu/Debian, instale o pacote `python3-venv`.
 
 ## Swagger
 
-Documentação interativa em `http://localhost:5000/openapi`, com exemplos de payload em todas
-as rotas. A especificação bruta fica em `http://localhost:5000/openapi/openapi.json`.
+Documentação interativa em `http://localhost:5001/openapi`, com exemplos de payload em todas
+as rotas. A especificação bruta fica em `http://localhost:5001/openapi/openapi.json`.
 
 ## Rotas
 

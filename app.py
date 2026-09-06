@@ -167,4 +167,5 @@ def duplicar(path: EsquemaPath):
 init_db()
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    # DECISÃO: porta 5001 porque no macOS o AirPlay Receiver ocupa a 5000 por padrão.
+    app.run(host="127.0.0.1", port=5001)
