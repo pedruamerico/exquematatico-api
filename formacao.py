@@ -113,6 +113,14 @@ def gerar_time(formacao: str, adversario: bool = False) -> list[dict]:
 # Negativo sobe o time, em direção ao gol adversário.
 DESLOCAMENTO = {"padrao": 0.0, "ofensivo": -16.0, "defensivo": 8.0}
 
+# Espaço mínimo entre o goleiro e o jogador de linha mais recuado. A ficha ocupa cerca de
+# 4 pontos da escala, então abaixo disso as duas se sobrepõem na tela.
+FOLGA_GOLEIRO = 5.0
+
+# Distância mínima da linha central que o time mais avançado respeita. Sem ela os dois
+# times cruzam o meio-campo e os atacantes centrais, ambos em x = 50, se sobrepõem.
+FOLGA_MEIO = 4.0
+
 
 def aplicar_deslocamento(jogadores: list[dict], chave: str, adversario: bool = False) -> list[dict]:
     """Move o time inteiro no eixo y, menos o goleiro, que fica na meta.
@@ -120,8 +128,33 @@ def aplicar_deslocamento(jogadores: list[dict], chave: str, adversario: bool = F
     No OFENSIVO a casa sobe e o adversário recua para proteger o gol; no DEFENSIVO a casa
     recua e o adversário avança. Os dois se movem para o mesmo lado do campo, o que mantém
     a distância entre as linhas e evita que as fichas se sobreponham.
+
+    Recuar o time sem mover o goleiro faria a defesa passar por cima dele, então o recuo
+    para em FOLGA_GOLEIRO da meta.
     """
     delta = DESLOCAMENTO.get(chave, 0.0)
+    goleiro = next((j for j in jogadores if j["papel"] == PAPEL_GOLEIRO), None)
+    linha = [j for j in jogadores if j["papel"] != PAPEL_GOLEIRO]
+
+    if goleiro is not None and linha:
+        # O time se move como bloco: em vez de limitar cada jogador, o deslocamento inteiro
+        # é reduzido até o mais recuado caber. Limitar um a um comprimiria as linhas e
+        # empilharia volante sobre zagueiro.
+        if adversario:
+            recuo = min(j["y"] for j in linha) + delta - (goleiro["y"] + FOLGA_GOLEIRO)
+            if recuo < 0:
+                delta -= recuo
+            avanco = max(j["y"] for j in linha) + delta - (50.0 - FOLGA_MEIO)
+            if avanco > 0:
+                delta -= avanco
+        else:
+            recuo = max(j["y"] for j in linha) + delta - (goleiro["y"] - FOLGA_GOLEIRO)
+            if recuo > 0:
+                delta -= recuo
+            avanco = min(j["y"] for j in linha) + delta - (50.0 + FOLGA_MEIO)
+            if avanco < 0:
+                delta -= avanco
+
     copia = []
     for j in jogadores:
         novo = dict(j)
