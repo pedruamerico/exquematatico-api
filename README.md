@@ -18,6 +18,8 @@ O frontend fica em outro repositório: `exquematatico-front`.
   as operações no banco em transação.
 - `formacao.py`: converte a string de formação (`4-3-3`) nas coordenadas dos 11 jogadores e
   aplica o deslocamento que gera as variações Ofensivo e Defensivo.
+- `formacoes_reais.py`: só dado, sem lógica. Posicionamento real das formações mais comuns,
+  consultado por `formacao.py`.
 - `database.py`: conexão SQLite (com `PRAGMA foreign_keys = ON`, necessário para o CASCADE
   funcionar), schema e `init_db()`, executado automaticamente ao subir a API.
 - `seed.py`: opcional, cria dois esquemas de exemplo.
@@ -59,9 +61,17 @@ original e a duplicação gera um novo.
 ### Formação
 
 A formação lista os jogadores de linha do setor mais defensivo ao mais ofensivo, sem contar o
-goleiro, e precisa somar 10: `4-3-3`, `4-4-2`, `4-2-3-1`, `3-5-2`. O módulo `formacao.py`
-distribui cada setor numa faixa do campo e nomeia os papéis, virando lateral nas pontas de
-uma linha de quatro e ponta nas pontas de um ataque de três.
+goleiro, e precisa somar 10: `4-3-3`, `4-4-2`, `4-2-3-1`, `3-5-2`.
+
+As posições vêm de duas fontes. As formações de `formacoes_reais.py` (`4-3-3`, `4-4-2`,
+`4-2-3-1`, `3-5-2` e `5-4-1`) usam posicionamento real, extraído de dados de partidas.
+Qualquer outra formação válida cai na regra geométrica de `formacao.py`, que distribui cada
+setor numa faixa do campo e nomeia os papéis, virando lateral nas pontas de uma linha de
+quatro e ponta nas pontas de um ataque de três.
+
+Nos dois casos o retorno é o mesmo, e o espelhamento do adversário e o deslocamento das
+variações se aplicam igual. A diferença aparece só na precisão do posicionamento: o dado real
+distingue ponta direita de esquerda, por exemplo, enquanto a geometria usa um papel só.
 
 ## Instalação e execução
 

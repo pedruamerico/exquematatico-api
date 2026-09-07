@@ -6,7 +6,11 @@ espelho vertical disso.
 
 A formação lista os jogadores de linha do setor mais defensivo ao mais ofensivo, sem o
 goleiro: '4-3-3' são 4 defensores, 3 meias e 3 atacantes, totalizando 10 + goleiro.
+
+As formações listadas em FORMACOES usam posicionamento real; o resto cai na regra
+geométrica deste módulo.
 """
+from formacoes_reais import FORMACOES
 
 GOLEIRO_Y = 94.0
 # O ataque para antes do meio-campo: sem essa folga os atacantes centrais dos dois times,
@@ -68,12 +72,8 @@ def _xs(qtd: int) -> list[float]:
     return [margem + passo * i for i in range(qtd)]
 
 
-def gerar_time(formacao: str, adversario: bool = False) -> list[dict]:
-    """Devolve 11 jogadores (goleiro + linha) posicionados conforme a formação.
-
-    Com adversario=True o time é espelhado no eixo vertical: ataca para baixo.
-    """
-    setores = analisar(formacao)
+def _gerar_por_geometria(setores: list[int]) -> list[dict]:
+    """Distribui os jogadores por setor, para a formação que não está em FORMACOES."""
     jogadores = [{"numero": 1, "papel": PAPEL_GOLEIRO, "x": 50.0, "y": GOLEIRO_Y}]
 
     papeis = PAPEIS_POR_SETOR[len(setores)]
@@ -88,6 +88,17 @@ def gerar_time(formacao: str, adversario: bool = False) -> list[dict]:
                 papel = extremo[0][0 if indice_x == 0 else 1]
             jogadores.append({"numero": numero, "papel": papel, "x": x, "y": y})
             numero += 1
+    return jogadores
+
+
+def gerar_time(formacao: str, adversario: bool = False) -> list[dict]:
+    """Devolve 11 jogadores (goleiro + linha) posicionados conforme a formação.
+
+    Com adversario=True o time é espelhado no eixo vertical: ataca para baixo.
+    """
+    setores = analisar(formacao)
+    reais = FORMACOES.get(formacao)
+    jogadores = [dict(j) for j in reais] if reais else _gerar_por_geometria(setores)
 
     if adversario:
         for j in jogadores:
