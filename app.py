@@ -10,72 +10,100 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 import services
 from database import init_db
 
-EXEMPLO_POSICOES = [
-    {"numero": 1, "papel": "GOL", "x": 50, "y": 94},
-    {"numero": 2, "papel": "LD", "x": 85, "y": 75},
-    {"numero": 3, "papel": "ZAG", "x": 63, "y": 78},
-    {"numero": 4, "papel": "ZAG", "x": 37, "y": 78},
-    {"numero": 5, "papel": "LE", "x": 15, "y": 75},
-    {"numero": 6, "papel": "VOL", "x": 50, "y": 60},
-    {"numero": 7, "papel": "PONTA", "x": 82, "y": 30},
-    {"numero": 8, "papel": "MC", "x": 65, "y": 48},
-    {"numero": 9, "papel": "ATA", "x": 50, "y": 20},
-    {"numero": 10, "papel": "MC", "x": 35, "y": 48},
-    {"numero": 11, "papel": "PONTA", "x": 18, "y": 30},
+EXEMPLO_CASA = [
+    {"numero": 1, "papel": "GOL", "em_campo": True, "x": 50, "y": 94},
+    {"numero": 2, "papel": "LE", "em_campo": True, "x": 12, "y": 78},
+    {"numero": 9, "papel": "PONTA", "em_campo": True, "x": 12, "y": 20},
+    {"numero": 12, "papel": "ATA", "em_campo": False, "x": None, "y": None},
 ]
+EXEMPLO_VISITANTE = [
+    {"numero": 1, "papel": "GOL", "em_campo": True, "x": 50, "y": 6},
+    {"numero": 2, "papel": "LE", "em_campo": True, "x": 88, "y": 22},
+]
+EXEMPLO_VARIACAO_IN = {
+    "chave": "custom",
+    "nome": "Saída de bola",
+    "casa": EXEMPLO_CASA,
+    "visitante": EXEMPLO_VISITANTE,
+}
+EXEMPLO_VARIACAO_OUT = {"id": 1, **EXEMPLO_VARIACAO_IN}
 EXEMPLO_ESQUEMA_IN = {
     "nome": "4-3-3 pressão alta",
     "formacao": "4-3-3",
     "tipo": "ofensivo",
     "anotacoes": "Pontas abertos, laterais apoiam.",
-    "posicoes": EXEMPLO_POSICOES,
 }
-EXEMPLO_ESQUEMA_OUT = {"id": 1, "criado_em": "2026-09-05T20:00:00+00:00", **EXEMPLO_ESQUEMA_IN}
-EXEMPLO_RESUMO = {k: EXEMPLO_ESQUEMA_OUT[k] for k in ("id", "nome", "formacao", "tipo", "criado_em")}
+EXEMPLO_ESQUEMA_OUT = {
+    "id": 1,
+    "criado_em": "2026-09-05T20:00:00+00:00",
+    **EXEMPLO_ESQUEMA_IN,
+    "variacoes": [EXEMPLO_VARIACAO_OUT],
+}
 
 
-class Posicao(BaseModel):
-    numero: int = Field(..., description="Número da ficha (1-11), único no esquema")
+class Jogador(BaseModel):
+    numero: int = Field(..., description="Número da camisa (1-99), único no time")
     papel: str = Field(..., description="Papel tático curto (GOL, ZAG, PONTA...)")
-    x: float = Field(..., description="% horizontal do centro da ficha (0 = esquerda, 100 = direita)")
-    y: float = Field(..., description="% vertical do centro da ficha (0 = topo, 100 = base)")
+    em_campo: bool = Field(True, description="Falso coloca o jogador no banco; x e y ficam nulos")
+    x: Optional[float] = Field(None, description="% horizontal do centro da ficha (0 = esquerda)")
+    y: Optional[float] = Field(None, description="% vertical do centro da ficha (0 = topo)")
+
+
+class VariacaoIn(BaseModel):
+    chave: str = Field("custom", description="padrao | ofensivo | defensivo | custom")
+    nome: Optional[str] = Field(None, description="Nome livre; as fixas usam o nome padrão")
+    casa: list[Jogador] = Field(default_factory=list, description="Time da casa, até 11 em campo")
+    visitante: list[Jogador] = Field(default_factory=list, description="Adversário, até 11 em campo")
+    model_config = {"json_schema_extra": {"example": EXEMPLO_VARIACAO_IN}}
+
+
+class VariacaoOut(VariacaoIn):
+    id: int
+    nome: str
+    model_config = {"json_schema_extra": {"example": EXEMPLO_VARIACAO_OUT}}
 
 
 class EsquemaIn(BaseModel):
     nome: str
-    formacao: str = Field(..., description="Texto livre, ex.: 4-3-3, 1-4-5")
+    formacao: str = Field(..., description="Soma 10 jogadores de linha, ex.: 4-3-3, 4-2-3-1")
     tipo: str = Field(..., description="ofensivo | defensivo | bola_parada")
     anotacoes: str = ""
-    posicoes: list[Posicao] = Field(..., description="Exatamente 11 posições, números 1-11 sem repetição")
+    variacoes: Optional[list[VariacaoIn]] = Field(
+        None, description="Omitido, o esquema nasce com Padrão, Ofensivo e Defensivo da formação")
     model_config = {"json_schema_extra": {"example": EXEMPLO_ESQUEMA_IN}}
 
 
-class EsquemaResumo(BaseModel):
+class EsquemaOut(BaseModel):
     id: int
     nome: str
     formacao: str
     tipo: str
-    criado_em: str = Field(..., description="ISO 8601 UTC, gerado pelo servidor")
-    model_config = {"json_schema_extra": {"example": EXEMPLO_RESUMO}}
-
-
-class EsquemaCompleto(EsquemaResumo):
     anotacoes: str
-    posicoes: list[Posicao]
+    criado_em: str = Field(..., description="ISO 8601 UTC, gerado pelo servidor")
+    variacoes: list[VariacaoOut]
     model_config = {"json_schema_extra": {"example": EXEMPLO_ESQUEMA_OUT}}
 
 
-class ListaEsquemas(RootModel[list[EsquemaResumo]]):
-    model_config = {"json_schema_extra": {"example": [EXEMPLO_RESUMO]}}
+class ListaEsquemas(RootModel[list[EsquemaOut]]):
+    model_config = {"json_schema_extra": {"example": [EXEMPLO_ESQUEMA_OUT]}}
 
 
 class Erro(BaseModel):
     erro: str
-    model_config = {"json_schema_extra": {"example": {"erro": "O esquema deve ter exatamente 11 posições."}}}
+    model_config = {
+        "json_schema_extra": {
+            "example": {"erro": "O time 'casa' tem 12 jogadores em campo; o máximo é 11."}
+        }
+    }
 
 
 class EsquemaPath(BaseModel):
     id: int = Field(..., description="ID do esquema")
+
+
+class VariacaoPath(BaseModel):
+    id: int = Field(..., description="ID do esquema")
+    variacao_id: int = Field(..., description="ID da variação")
 
 
 class ListaQuery(BaseModel):
@@ -83,9 +111,8 @@ class ListaQuery(BaseModel):
 
 
 def _erro_validacao_pydantic(e: ValidationError):
-    # DECISÃO: a lib valida forma/tipos do body antes da rota; esses erros viram 400 no mesmo
-    # formato {"erro"} para o cliente ver um único contrato de erro. As regras de negócio
-    # (11 posições, números únicos, faixas, textos obrigatórios) ficam em services.py.
+    # A lib valida forma e tipo antes da rota; converter aqui mantém um só formato de erro
+    # para o cliente. Regra de negócio fica em services.py.
     primeiro = e.errors()[0]
     campo = ".".join(str(p) for p in primeiro["loc"]) or "payload"
     motivo = MENSAGENS_PYDANTIC.get(primeiro["type"], "valor inválido")
@@ -101,6 +128,8 @@ MENSAGENS_PYDANTIC = {
     "model_type": "esperado um objeto",
     "list_type": "esperada uma lista",
     "string_type": "esperado texto",
+    "bool_type": "esperado verdadeiro ou falso",
+    "bool_parsing": "esperado verdadeiro ou falso",
     "int_type": "esperado um número inteiro",
     "int_parsing": "esperado um número inteiro",
     "int_from_float": "esperado um número inteiro",
@@ -111,8 +140,11 @@ MENSAGENS_PYDANTIC = {
 
 info = Info(
     title="ExquemaTatico API",
-    version="1.0.0",
-    description="Quadro tático de futebol: esquemas com 11 posições em coordenadas percentuais do campo.",
+    version="2.0.0",
+    description=(
+        "Quadro tático de futebol. Um esquema tem variações (Padrão, Ofensivo, Defensivo e as "
+        "personalizadas); cada variação posiciona os dois times em coordenadas percentuais do campo."
+    ),
 )
 app = OpenAPI(
     __name__,
@@ -124,7 +156,7 @@ app = OpenAPI(
 )
 CORS(app)
 app.json.ensure_ascii = False
-tag = Tag(name="Esquemas", description="Esquemas táticos e suas 11 posições")
+tag = Tag(name="Esquemas", description="Esquemas táticos, variações e jogadores")
 
 
 @app.errorhandler(services.ErroValidacao)
@@ -150,41 +182,68 @@ def _swagger():
     return redirect("/openapi/swagger")
 
 
-@app.get("/esquemas", tags=[tag], summary="Lista resumida de esquemas", responses={200: ListaEsquemas, 400: Erro})
+@app.get("/esquemas", tags=[tag], summary="Lista os esquemas com suas variações",
+         responses={200: ListaEsquemas, 400: Erro})
 def listar(query: ListaQuery):
     return jsonify(services.listar_esquemas(query.tipo))
 
 
-@app.get("/esquemas/<int:id>", tags=[tag], summary="Esquema completo com posições", responses={200: EsquemaCompleto, 404: Erro})
+@app.get("/esquemas/<int:id>", tags=[tag], summary="Esquema completo com variações e jogadores",
+         responses={200: EsquemaOut, 404: Erro})
 def obter(path: EsquemaPath):
     return jsonify(services.obter_esquema(path.id))
 
 
-@app.post("/esquemas", tags=[tag], summary="Cria um esquema", responses={201: EsquemaCompleto, 400: Erro})
+@app.post("/esquemas", tags=[tag], summary="Cria um esquema e suas variações iniciais",
+          responses={201: EsquemaOut, 400: Erro})
 def criar(body: EsquemaIn):
     return jsonify(services.criar_esquema(body.model_dump())), 201
 
 
-@app.put("/esquemas/<int:id>", tags=[tag], summary="Substitui dados e posições de um esquema (criado_em preservado)",
-         responses={200: EsquemaCompleto, 400: Erro, 404: Erro})
+@app.put("/esquemas/<int:id>", tags=[tag],
+         summary="Substitui os dados do esquema (criado_em preservado)",
+         responses={200: EsquemaOut, 400: Erro, 404: Erro})
 def atualizar(path: EsquemaPath, body: EsquemaIn):
     return jsonify(services.atualizar_esquema(path.id, body.model_dump()))
 
 
-@app.delete("/esquemas/<int:id>", tags=[tag], summary="Exclui um esquema e suas posições", responses={204: None, 404: Erro})
+@app.delete("/esquemas/<int:id>", tags=[tag], summary="Exclui um esquema e tudo que pende dele",
+            responses={204: None, 404: Erro})
 def excluir(path: EsquemaPath):
     services.excluir_esquema(path.id)
     return "", 204
 
 
 @app.post("/esquemas/<int:id>/duplicar", tags=[tag], summary="Cria uma cópia independente do esquema",
-          responses={201: EsquemaCompleto, 404: Erro})
+          responses={201: EsquemaOut, 404: Erro})
 def duplicar(path: EsquemaPath):
     return jsonify(services.duplicar_esquema(path.id)), 201
+
+
+@app.post("/esquemas/<int:id>/variacoes", tags=[tag],
+          summary="Adiciona uma variação personalizada (copia o Padrão se vier sem jogadores)",
+          responses={201: EsquemaOut, 400: Erro, 404: Erro})
+def criar_variacao(path: EsquemaPath, body: VariacaoIn):
+    return jsonify(services.criar_variacao(path.id, body.model_dump())), 201
+
+
+@app.put("/esquemas/<int:id>/variacoes/<int:variacao_id>", tags=[tag],
+         summary="Substitui nome e jogadores de uma variação",
+         responses={200: EsquemaOut, 400: Erro, 404: Erro})
+def atualizar_variacao(path: VariacaoPath, body: VariacaoIn):
+    return jsonify(services.atualizar_variacao(path.id, path.variacao_id, body.model_dump()))
+
+
+@app.delete("/esquemas/<int:id>/variacoes/<int:variacao_id>", tags=[tag],
+            summary="Exclui uma variação personalizada (as fixas não podem ser excluídas)",
+            responses={204: None, 400: Erro, 404: Erro})
+def excluir_variacao(path: VariacaoPath):
+    services.excluir_variacao(path.id, path.variacao_id)
+    return "", 204
 
 
 init_db()
 
 if __name__ == "__main__":
-    # DECISÃO: porta 5001 porque no macOS o AirPlay Receiver ocupa a 5000 por padrão.
+    # 5001 e não 5000: no macOS o AirPlay Receiver ocupa a 5000.
     app.run(host="127.0.0.1", port=5001)

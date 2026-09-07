@@ -1,7 +1,7 @@
 # ExquemaTatico API
 
 Backend do ExquemaTatico, um quadro tático de futebol digital. O usuário monta esquemas
-(formação, jogada, bola parada), posiciona 11 jogadores num campo e salva numa biblioteca
+(formação, jogada, bola parada), posiciona os dois times num campo e salva numa biblioteca
 pessoal. Esta API guarda esses esquemas em SQLite e os expõe por REST com documentação
 Swagger.
 
@@ -14,26 +14,54 @@ O frontend fica em outro repositório: `exquematatico-front`.
 - `app.py`: cria a aplicação Flask (via flask-openapi3), declara os modelos Pydantic usados
   no Swagger, os handlers de erro e as rotas. As rotas são finas: recebem, chamam o serviço,
   respondem.
-- `services.py`: regras de negócio. Valida o payload na ordem definida (payload, tipo, 11
-  posições, números 1-11, números únicos, coordenadas 0-100, textos obrigatórios) e executa
+- `services.py`: regras de negócio. Valida o payload, monta as variações iniciais e executa
   as operações no banco em transação.
+- `formacao.py`: converte a string de formação (`4-3-3`) nas coordenadas dos 11 jogadores e
+  aplica o deslocamento que gera as variações Ofensivo e Defensivo.
 - `database.py`: conexão SQLite (com `PRAGMA foreign_keys = ON`, necessário para o CASCADE
   funcionar), schema e `init_db()`, executado automaticamente ao subir a API.
-- `seed.py`: opcional, cria dois esquemas de exemplo (um 4-3-3 ofensivo e um escanteio).
+- `seed.py`: opcional, cria dois esquemas de exemplo.
 
 O banco é o arquivo `exquematatico.db`, criado ao lado de `app.py` na primeira execução.
 
 ### Modelo
 
-Um esquema tem `nome`, `formacao` (texto livre), `tipo` (`ofensivo`, `defensivo` ou
-`bola_parada`), `anotacoes` e exatamente 11 posições. Cada posição tem `numero` (1-11, único
-no esquema), `papel` (texto curto, ex.: GOL, ZAG, PONTA) e `x`/`y`, que são a posição
-percentual (0 a 100) do centro da ficha em relação ao campo. `(0, 0)` é o canto superior
-esquerdo e `(100, 100)` o inferior direito. Por serem percentuais, o quadro é independente do
-tamanho da tela.
+Um **esquema** tem `nome`, `formacao`, `tipo` (`ofensivo`, `defensivo` ou `bola_parada`),
+`anotacoes` e uma lista de **variações**.
+
+Cada variação é um posicionamento completo dos dois times. Todo esquema nasce com três
+variações fixas, geradas a partir da formação:
+
+| Variação  | Chave       | O que representa                                  |
+| --------- | ----------- | ------------------------------------------------- |
+| Padrão    | `padrao`    | Os dois times em suas metades, formação neutra    |
+| Ofensivo  | `ofensivo`  | O time da casa sobe; o adversário recua           |
+| Defensivo | `defensivo` | O time da casa recua; o adversário avança         |
+
+Além dessas, o usuário adiciona quantas variações **personalizadas** quiser (chave `custom`,
+nome livre). As três fixas não podem ser excluídas; as personalizadas sim.
+
+Cada variação tem dois times, `casa` e `visitante`, com seus **jogadores**. Um jogador tem
+`numero` (1-99, único no time), `papel` (texto curto, ex.: GOL, ZAG, PONTA), `em_campo` e as
+coordenadas `x`/`y`.
+
+`x` e `y` são a posição percentual (0 a 100) do centro da ficha em relação ao campo. `(0, 0)`
+é o canto superior esquerdo e `(100, 100)` o inferior direito. Por serem percentuais, o
+quadro é independente do tamanho da tela. Um jogador com `em_campo: false` está no banco, e
+aí `x` e `y` são nulos.
+
+O limite é de 11 jogadores em campo por time. É permitido salvar com menos, para o usuário
+montar o esquema aos poucos.
 
 `criado_em` é gerado pelo servidor em ISO 8601 UTC. O cliente nunca o envia; o PUT preserva o
 original e a duplicação gera um novo.
+
+### Formação
+
+A formação lista os jogadores de linha do setor mais defensivo ao mais ofensivo, sem contar o
+goleiro, e precisa somar 10: `4-3-3`, `4-4-2`, `4-2-3-1`, `3-5-2`. O módulo `formacao.py`
+distribui cada setor numa faixa do campo e nomeia os papéis, virando lateral nas pontas de
+uma linha de quatro e ponta nas pontas de um ataque de três.
 
 ## Instalação e execução
 
@@ -73,33 +101,53 @@ as rotas. A especificação bruta fica em `http://localhost:5001/openapi/openapi
 
 ## Rotas
 
-| Método | Rota                      | Resposta                                        |
-| ------ | ------------------------- | ----------------------------------------------- |
-| GET    | `/esquemas`               | 200 lista resumida; `?tipo=` filtra (400 se inválido) |
-| GET    | `/esquemas/{id}`          | 200 esquema completo com posições, 404          |
-| POST   | `/esquemas`               | 201 esquema criado, 400                          |
-| PUT    | `/esquemas/{id}`          | 200 esquema atualizado, 400, 404                 |
-| DELETE | `/esquemas/{id}`          | 204, 404                                         |
-| POST   | `/esquemas/{id}/duplicar` | 201 cópia com nome "Cópia de {nome}", 404        |
+| Método | Rota                                          | Resposta                                          |
+| ------ | --------------------------------------------- | ------------------------------------------------- |
+| GET    | `/esquemas`                                   | 200 lista com variações; `?tipo=` filtra (400 se inválido) |
+| GET    | `/esquemas/{id}`                              | 200 esquema completo, 404                          |
+| POST   | `/esquemas`                                   | 201 esquema criado com as três variações, 400      |
+| PUT    | `/esquemas/{id}`                              | 200 esquema atualizado, 400, 404                   |
+| DELETE | `/esquemas/{id}`                              | 204, 404                                           |
+| POST   | `/esquemas/{id}/duplicar`                     | 201 cópia com nome "Cópia de {nome}", 404          |
+| POST   | `/esquemas/{id}/variacoes`                    | 201 esquema com a variação criada, 400, 404        |
+| PUT    | `/esquemas/{id}/variacoes/{variacao_id}`      | 200 esquema atualizado, 400, 404                   |
+| DELETE | `/esquemas/{id}/variacoes/{variacao_id}`      | 204, 400 (se for fixa), 404                        |
 
 Erros sempre vêm como JSON `{"erro": "mensagem em pt-BR"}`.
 
-Exemplo de payload para POST e PUT:
+Criar um esquema não exige posições: omitindo `variacoes`, a API monta Padrão, Ofensivo e
+Defensivo a partir da formação.
 
 ```json
 {
   "nome": "4-3-3 pressão alta",
   "formacao": "4-3-3",
   "tipo": "ofensivo",
-  "anotacoes": "Pontas abertos, laterais apoiam.",
-  "posicoes": [
-    {"numero": 1, "papel": "GOL", "x": 50, "y": 94},
-    {"numero": 2, "papel": "LD", "x": 85, "y": 75}
+  "anotacoes": "Pontas abertos, laterais apoiam."
+}
+```
+
+Para reposicionar, envie a variação inteira no PUT:
+
+```json
+{
+  "nome": "Padrão",
+  "casa": [
+    {"numero": 1, "papel": "GOL", "em_campo": true, "x": 50, "y": 94},
+    {"numero": 12, "papel": "ATA", "em_campo": false, "x": null, "y": null}
+  ],
+  "visitante": [
+    {"numero": 1, "papel": "GOL", "em_campo": true, "x": 50, "y": 6}
   ]
 }
 ```
 
-(O exemplo está abreviado; a API exige as 11 posições.)
+Adicionar uma variação personalizada sem enviar jogadores copia o Padrão como ponto de
+partida:
+
+```json
+{"nome": "Escanteio pela direita"}
+```
 
 ## CORS
 
