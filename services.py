@@ -268,8 +268,31 @@ def _exigir_existente(conn, esquema_id: int) -> None:
         raise NaoEncontrado(f"Esquema {esquema_id} não encontrado.")
 
 
+def _regenerar_para_formacao(conn, esquema_id: int, texto_formacao: str) -> list:
+    """As variações da formação nova, preservando o nome das personalizadas.
+
+    O posicionamento antigo descreve a formação anterior e não sobrevive à troca: manter
+    um 4-3-3 num esquema que agora diz 3-5-2 faria o campo contradizer o próprio rótulo.
+    """
+    variacoes = _variacoes_iniciais(texto_formacao)
+    padrao = next(v for v in variacoes if v["chave"] == "padrao")
+    customs = conn.execute(
+        "SELECT nome FROM variacao WHERE esquema_id = ? AND chave = 'custom' ORDER BY ordem, id",
+        (esquema_id,),
+    ).fetchall()
+    variacoes += [
+        {"chave": "custom", "nome": c["nome"], "jogadores": [dict(j) for j in padrao["jogadores"]]}
+        for c in customs
+    ]
+    return variacoes
+
+
 def atualizar_esquema(esquema_id: int, payload) -> dict:
-    """Substitui os dados do esquema. As variações só são tocadas se vierem no payload."""
+    """Substitui os dados do esquema.
+
+    As variações são regravadas quando vêm no payload ou quando a formação muda; fora
+    esses dois casos o posicionamento salvo é preservado.
+    """
     dados = validar_esquema(payload)
     variacoes = payload.get("variacoes")
     if variacoes is not None:
@@ -278,12 +301,18 @@ def atualizar_esquema(esquema_id: int, payload) -> dict:
         variacoes = [validar_variacao(v) for v in variacoes]
 
     with conexao() as conn:
-        _exigir_existente(conn, esquema_id)
+        atual = conn.execute(
+            "SELECT formacao FROM esquema WHERE id = ?", (esquema_id,)
+        ).fetchone()
+        if atual is None:
+            raise NaoEncontrado(f"Esquema {esquema_id} não encontrado.")
         # criado_em não entra no UPDATE: o valor original é preservado.
         conn.execute(
             "UPDATE esquema SET nome = ?, formacao = ?, tipo = ?, anotacoes = ? WHERE id = ?",
             (dados["nome"], dados["formacao"], dados["tipo"], dados["anotacoes"], esquema_id),
         )
+        if variacoes is None and dados["formacao"] != atual["formacao"]:
+            variacoes = _regenerar_para_formacao(conn, esquema_id, dados["formacao"])
         if variacoes is not None:
             conn.execute("DELETE FROM variacao WHERE esquema_id = ?", (esquema_id,))
             _gravar_variacoes(conn, esquema_id, variacoes)

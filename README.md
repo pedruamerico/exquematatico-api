@@ -58,13 +58,20 @@ montar o esquema aos poucos.
 `criado_em` é gerado pelo servidor em ISO 8601 UTC. O cliente nunca o envia; o PUT preserva o
 original e a duplicação gera um novo.
 
+Mudar a `formacao` de um esquema existente regenera todas as variações a partir da formação
+nova, inclusive as personalizadas, que mantêm o nome e recebem o posicionamento do Padrão. O
+posicionamento anterior descreve a formação antiga e não sobrevive à troca — sem isso o campo
+contradiz o rótulo do esquema. Enviar `variacoes` no mesmo PUT tem precedência: valem as
+variações do payload.
+
 ### Formação
 
 A formação lista os jogadores de linha do setor mais defensivo ao mais ofensivo, sem contar o
 goleiro, e precisa somar 10: `4-3-3`, `4-4-2`, `4-2-3-1`, `3-5-2`.
 
 As posições vêm de duas fontes. As formações de `formacoes_reais.py` (`4-3-3`, `4-4-2`,
-`4-2-3-1`, `3-5-2` e `5-4-1`) usam posicionamento real, extraído de dados de partidas.
+`4-2-3-1`, `3-5-2`, `3-1-4-2` e `5-4-1`) usam posicionamento real, extraído de dados de
+partidas.
 Qualquer outra formação válida cai na regra geométrica de `formacao.py`, que distribui cada
 setor numa faixa do campo e nomeia os papéis, virando lateral nas pontas de uma linha de
 quatro e ponta nas pontas de um ataque de três.
@@ -103,6 +110,16 @@ Receiver ocupa a 5000 por padrão. Para usar outra porta, altere a última linha
 constante `API_BASE_URL` em `js/api.js` no frontend.
 
 Se `python -m venv` falhar no Ubuntu/Debian, instale o pacote `python3-venv`.
+
+## Testes
+
+```powershell
+python -m unittest test_services -v
+```
+
+Cobrem validação de payload, geração de formação, CRUD, regeneração de variações e a
+cascata do banco. Cada teste roda num SQLite temporário próprio, então a suíte não toca o
+`exquematatico.db` de trabalho e dispensa a API no ar.
 
 ## Swagger
 
