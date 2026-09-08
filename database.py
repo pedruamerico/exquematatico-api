@@ -104,8 +104,7 @@ def conexao():
         conn.close()
 
 
-# Colunas acrescentadas depois da primeira versão do schema. CREATE TABLE IF NOT EXISTS
-# não altera tabela existente, então um banco antigo precisa recebê-las por ALTER.
+# CREATE TABLE IF NOT EXISTS não altera tabela existente: banco antigo precisa de ALTER.
 COLUNAS_NOVAS = {
     "variacao": (
         ("bola_x", "REAL NOT NULL DEFAULT 50"),

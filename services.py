@@ -139,7 +139,6 @@ def _validar_zonas(lista) -> list:
             raise ErroValidacao(f"A largura da zona deve ser ao menos {ZONA_MIN_LARGURA}.")
         if not _eh_numero(altura) or altura < ZONA_MIN_ALTURA:
             raise ErroValidacao(f"A altura da zona deve ser ao menos {ZONA_MIN_ALTURA}.")
-        # A zona é retângulo no campo: o canto oposto também precisa caber nele.
         if x + largura > 100 or y + altura > 100:
             raise ErroValidacao("A zona ultrapassa o limite do campo.")
         saida.append({"time": time, "x": x, "y": y,
@@ -226,12 +225,7 @@ def validar_esquema(payload) -> dict:
 
 
 def validar_lista_de_variacoes(variacoes) -> list:
-    """Valida a lista inteira, não só cada variação isolada.
-
-    As três fixas são o contrato do esquema — a API recusa excluí-las depois, então
-    aceitar um payload sem elas ou com uma repetida deixaria o esquema em um estado
-    que nenhuma outra rota consegue produzir nem corrigir.
-    """
+    """Exige as três fixas, únicas, mais quantas custom de nomes distintos."""
     if not isinstance(variacoes, list) or not variacoes:
         raise ErroValidacao("O esquema deve ter ao menos uma variação.")
 
@@ -327,7 +321,6 @@ def _variacoes_de(conn, esquema_ids: list) -> dict:
     ):
         por_variacao[j["variacao_id"]].append(j)
 
-    # Uma query por tipo de marcação, não uma por variação: o custo não cresce com a lista.
     marcacoes = {campo: {vid: [] for vid in ids_variacao} for campo in MARCACOES}
     for campo, (tabela, colunas) in MARCACOES.items():
         for linha in conn.execute(
@@ -425,11 +418,7 @@ def _exigir_existente(conn, esquema_id: int) -> None:
 
 
 def _regenerar_para_formacao(conn, esquema_id: int, texto_formacao: str) -> list:
-    """As variações da formação nova, preservando o nome das personalizadas.
-
-    O posicionamento antigo descreve a formação anterior e não sobrevive à troca: manter
-    um 4-3-3 num esquema que agora diz 3-5-2 faria o campo contradizer o próprio rótulo.
-    """
+    """As variações da formação nova, preservando o nome das personalizadas."""
     variacoes = _variacoes_iniciais(texto_formacao)
     padrao = next(v for v in variacoes if v["chave"] == "padrao")
     customs = conn.execute(
@@ -444,11 +433,7 @@ def _regenerar_para_formacao(conn, esquema_id: int, texto_formacao: str) -> list
 
 
 def atualizar_esquema(esquema_id: int, payload) -> dict:
-    """Substitui os dados do esquema.
-
-    As variações são regravadas quando vêm no payload ou quando a formação muda; fora
-    esses dois casos o posicionamento salvo é preservado.
-    """
+    """Substitui os dados do esquema; regrava as variações se a formação mudar."""
     dados = validar_esquema(payload)
     variacoes = payload.get("variacoes")
     if variacoes is not None:
