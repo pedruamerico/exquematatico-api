@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS variacao (
     esquema_id INTEGER NOT NULL REFERENCES esquema(id) ON DELETE CASCADE,
     chave      TEXT NOT NULL CHECK (chave IN ('padrao', 'ofensivo', 'defensivo', 'custom')),
     nome       TEXT NOT NULL,
-    ordem      INTEGER NOT NULL
+    ordem      INTEGER NOT NULL,
+    bola_x     REAL NOT NULL DEFAULT 50 CHECK (bola_x BETWEEN 0 AND 100),
+    bola_y     REAL NOT NULL DEFAULT 50 CHECK (bola_y BETWEEN 0 AND 100)
 );
 
 CREATE INDEX IF NOT EXISTS idx_variacao_esquema ON variacao(esquema_id);
@@ -45,6 +47,43 @@ CREATE TABLE IF NOT EXISTS jogador (
 );
 
 CREATE INDEX IF NOT EXISTS idx_jogador_variacao ON jogador(variacao_id);
+
+-- Marcações táticas desenhadas sobre o campo. Todas percentuais 0-100, como o jogador.
+-- 'desenho' cobre seta de movimentação e linha de passe: mesma geometria, tipos distintos.
+CREATE TABLE IF NOT EXISTS desenho (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    variacao_id INTEGER NOT NULL REFERENCES variacao(id) ON DELETE CASCADE,
+    tipo        TEXT NOT NULL CHECK (tipo IN ('mov', 'passe')),
+    x1          REAL NOT NULL CHECK (x1 BETWEEN 0 AND 100),
+    y1          REAL NOT NULL CHECK (y1 BETWEEN 0 AND 100),
+    x2          REAL NOT NULL CHECK (x2 BETWEEN 0 AND 100),
+    y2          REAL NOT NULL CHECK (y2 BETWEEN 0 AND 100),
+    ordem       INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS zona (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    variacao_id INTEGER NOT NULL REFERENCES variacao(id) ON DELETE CASCADE,
+    time        TEXT NOT NULL CHECK (time IN ('casa', 'visitante', 'neutra')),
+    x           REAL NOT NULL CHECK (x BETWEEN 0 AND 100),
+    y           REAL NOT NULL CHECK (y BETWEEN 0 AND 100),
+    largura     REAL NOT NULL CHECK (largura > 0 AND largura <= 100),
+    altura      REAL NOT NULL CHECK (altura > 0 AND altura <= 100),
+    ordem       INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS anotacao (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    variacao_id INTEGER NOT NULL REFERENCES variacao(id) ON DELETE CASCADE,
+    texto       TEXT NOT NULL,
+    x           REAL NOT NULL CHECK (x BETWEEN 0 AND 100),
+    y           REAL NOT NULL CHECK (y BETWEEN 0 AND 100),
+    ordem       INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_desenho_variacao ON desenho(variacao_id);
+CREATE INDEX IF NOT EXISTS idx_zona_variacao ON zona(variacao_id);
+CREATE INDEX IF NOT EXISTS idx_anotacao_variacao ON anotacao(variacao_id);
 """
 
 

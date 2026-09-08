@@ -11,6 +11,12 @@ NOMES_FIXOS = {"padrao": "Padrão", "ofensivo": "Ofensivo", "defensivo": "Defens
 MAX_EM_CAMPO = 11
 NUMERO_MIN, NUMERO_MAX = 1, 99
 
+TIPOS_DESENHO = ("mov", "passe")
+TIMES_ZONA = ("casa", "visitante", "neutra")
+BOLA_PADRAO = (50.0, 50.0)
+MAX_TEXTO_ANOTACAO = 40
+ZONA_MIN_LARGURA, ZONA_MIN_ALTURA = 2.0, 2.5
+
 
 class ErroValidacao(Exception):
     """Payload inválido -> HTTP 400."""
@@ -91,6 +97,81 @@ def _validar_jogadores(jogadores, time: str) -> list:
     return sorted(normalizados, key=lambda j: j["numero"])
 
 
+def _coordenada(valor, campo: str) -> float:
+    if not _eh_numero(valor) or not 0 <= valor <= 100:
+        raise ErroValidacao(f"A coordenada '{campo}' deve estar entre 0 e 100.")
+    return float(valor)
+
+
+def _validar_desenhos(lista) -> list:
+    if not isinstance(lista, list):
+        raise ErroValidacao("O campo 'desenhos' deve ser uma lista.")
+    saida = []
+    for d in lista:
+        if not isinstance(d, dict):
+            raise ErroValidacao("Cada desenho deve ser um objeto com tipo, x1, y1, x2 e y2.")
+        tipo = d.get("tipo")
+        if tipo not in TIPOS_DESENHO:
+            raise ErroValidacao(f"Tipo de desenho inválido. Use um de: {', '.join(TIPOS_DESENHO)}.")
+        saida.append({
+            "tipo": tipo,
+            "x1": _coordenada(d.get("x1"), "x1"),
+            "y1": _coordenada(d.get("y1"), "y1"),
+            "x2": _coordenada(d.get("x2"), "x2"),
+            "y2": _coordenada(d.get("y2"), "y2"),
+        })
+    return saida
+
+
+def _validar_zonas(lista) -> list:
+    if not isinstance(lista, list):
+        raise ErroValidacao("O campo 'zonas' deve ser uma lista.")
+    saida = []
+    for z in lista:
+        if not isinstance(z, dict):
+            raise ErroValidacao("Cada zona deve ser um objeto com time, x, y, largura e altura.")
+        time = z.get("time", "neutra")
+        if time not in TIMES_ZONA:
+            raise ErroValidacao(f"Time da zona inválido. Use um de: {', '.join(TIMES_ZONA)}.")
+        x, y = _coordenada(z.get("x"), "x"), _coordenada(z.get("y"), "y")
+        largura, altura = z.get("largura"), z.get("altura")
+        if not _eh_numero(largura) or largura < ZONA_MIN_LARGURA:
+            raise ErroValidacao(f"A largura da zona deve ser ao menos {ZONA_MIN_LARGURA}.")
+        if not _eh_numero(altura) or altura < ZONA_MIN_ALTURA:
+            raise ErroValidacao(f"A altura da zona deve ser ao menos {ZONA_MIN_ALTURA}.")
+        # A zona é retângulo no campo: o canto oposto também precisa caber nele.
+        if x + largura > 100 or y + altura > 100:
+            raise ErroValidacao("A zona ultrapassa o limite do campo.")
+        saida.append({"time": time, "x": x, "y": y,
+                      "largura": float(largura), "altura": float(altura)})
+    return saida
+
+
+def _validar_anotacoes(lista) -> list:
+    if not isinstance(lista, list):
+        raise ErroValidacao("O campo 'anotacoes' deve ser uma lista.")
+    saida = []
+    for a in lista:
+        if not isinstance(a, dict):
+            raise ErroValidacao("Cada anotação deve ser um objeto com texto, x e y.")
+        texto = _texto_obrigatorio(a.get("texto"), "texto")
+        if len(texto) > MAX_TEXTO_ANOTACAO:
+            raise ErroValidacao(f"A anotação deve ter no máximo {MAX_TEXTO_ANOTACAO} caracteres.")
+        saida.append({"texto": texto,
+                      "x": _coordenada(a.get("x"), "x"),
+                      "y": _coordenada(a.get("y"), "y")})
+    return saida
+
+
+def _validar_bola(payload) -> tuple:
+    bola = payload.get("bola")
+    if bola is None:
+        return BOLA_PADRAO
+    if not isinstance(bola, dict):
+        raise ErroValidacao("O campo 'bola' deve ser um objeto com x e y.")
+    return _coordenada(bola.get("x"), "x"), _coordenada(bola.get("y"), "y")
+
+
 def validar_variacao(payload, exigir_chave: bool = True) -> dict:
     if not isinstance(payload, dict) or not payload:
         raise ErroValidacao("Payload obrigatório.")
@@ -106,7 +187,17 @@ def validar_variacao(payload, exigir_chave: bool = True) -> dict:
     for time in TIMES:
         jogadores += _validar_jogadores(payload.get(time, []), time)
 
-    return {"chave": chave, "nome": nome, "jogadores": jogadores}
+    bola_x, bola_y = _validar_bola(payload)
+    return {
+        "chave": chave,
+        "nome": nome,
+        "jogadores": jogadores,
+        "bola_x": bola_x,
+        "bola_y": bola_y,
+        "desenhos": _validar_desenhos(payload.get("desenhos", [])),
+        "zonas": _validar_zonas(payload.get("zonas", [])),
+        "anotacoes": _validar_anotacoes(payload.get("anotacoes", [])),
+    }
 
 
 def validar_esquema(payload) -> dict:
@@ -145,9 +236,31 @@ def _inserir_jogadores(conn, variacao_id: int, jogadores: list) -> None:
     )
 
 
+MARCACOES = {
+    "desenhos": ("desenho", ("tipo", "x1", "y1", "x2", "y2")),
+    "zonas": ("zona", ("time", "x", "y", "largura", "altura")),
+    "anotacoes": ("anotacao", ("texto", "x", "y")),
+}
+
+
+def _inserir_marcacoes(conn, variacao_id: int, dados: dict) -> None:
+    for campo, (tabela, colunas) in MARCACOES.items():
+        itens = dados.get(campo) or []
+        if not itens:
+            continue
+        nomes = ", ".join(("variacao_id",) + colunas + ("ordem",))
+        marcadores = ", ".join("?" * (len(colunas) + 2))
+        conn.executemany(
+            f"INSERT INTO {tabela} ({nomes}) VALUES ({marcadores})",
+            [(variacao_id, *(item[c] for c in colunas), ordem) for ordem, item in enumerate(itens)],
+        )
+
+
 def _montar_variacao(linha, jogadores: list) -> dict:
     variacao = {"id": linha["id"], "chave": linha["chave"], "nome": linha["nome"],
-                "casa": [], "visitante": []}
+                "bola": {"x": linha["bola_x"], "y": linha["bola_y"]},
+                "casa": [], "visitante": [],
+                "desenhos": [], "zonas": [], "anotacoes": []}
     for j in jogadores:
         variacao[j["time"]].append({
             "numero": j["numero"],
@@ -168,7 +281,7 @@ def _variacoes_de(conn, esquema_ids: list) -> dict:
         return {}
     marcadores = ",".join("?" * len(esquema_ids))
     variacoes = conn.execute(
-        f"SELECT id, esquema_id, chave, nome FROM variacao "
+        f"SELECT id, esquema_id, chave, nome, bola_x, bola_y FROM variacao "
         f"WHERE esquema_id IN ({marcadores}) ORDER BY esquema_id, ordem, id",
         tuple(esquema_ids),
     ).fetchall()
@@ -185,9 +298,22 @@ def _variacoes_de(conn, esquema_ids: list) -> dict:
     ):
         por_variacao[j["variacao_id"]].append(j)
 
+    # Uma query por tipo de marcação, não uma por variação: o custo não cresce com a lista.
+    marcacoes = {campo: {vid: [] for vid in ids_variacao} for campo in MARCACOES}
+    for campo, (tabela, colunas) in MARCACOES.items():
+        for linha in conn.execute(
+            f"SELECT variacao_id, {', '.join(colunas)} FROM {tabela} "
+            f"WHERE variacao_id IN ({marcadores_v}) ORDER BY variacao_id, ordem, id",
+            tuple(ids_variacao),
+        ):
+            marcacoes[campo][linha["variacao_id"]].append({c: linha[c] for c in colunas})
+
     resultado = {eid: [] for eid in esquema_ids}
     for v in variacoes:
-        resultado[v["esquema_id"]].append(_montar_variacao(v, por_variacao[v["id"]]))
+        montada = _montar_variacao(v, por_variacao[v["id"]])
+        for campo in MARCACOES:
+            montada[campo] = marcacoes[campo][v["id"]]
+        resultado[v["esquema_id"]].append(montada)
     return resultado
 
 
@@ -238,10 +364,13 @@ def _variacoes_iniciais(texto_formacao: str) -> list:
 def _gravar_variacoes(conn, esquema_id: int, variacoes: list) -> None:
     for ordem, v in enumerate(variacoes):
         cur = conn.execute(
-            "INSERT INTO variacao (esquema_id, chave, nome, ordem) VALUES (?, ?, ?, ?)",
-            (esquema_id, v["chave"], v["nome"], ordem),
+            "INSERT INTO variacao (esquema_id, chave, nome, ordem, bola_x, bola_y) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (esquema_id, v["chave"], v["nome"], ordem,
+             v.get("bola_x", BOLA_PADRAO[0]), v.get("bola_y", BOLA_PADRAO[1])),
         )
         _inserir_jogadores(conn, cur.lastrowid, v["jogadores"])
+        _inserir_marcacoes(conn, cur.lastrowid, v)
 
 
 def criar_esquema(payload) -> dict:
@@ -333,6 +462,9 @@ def duplicar_esquema(esquema_id: int) -> dict:
             "chave": v["chave"],
             "nome": v["nome"],
             "jogadores": [{**j, "time": time} for time in TIMES for j in v[time]],
+            "bola_x": v["bola"]["x"],
+            "bola_y": v["bola"]["y"],
+            **{campo: [dict(m) for m in v[campo]] for campo in MARCACOES},
         }
         for v in original["variacoes"]
     ]
@@ -363,7 +495,7 @@ def criar_variacao(esquema_id: int, payload) -> dict:
         _exigir_existente(conn, esquema_id)
         if not dados["jogadores"]:
             padrao = conn.execute(
-                "SELECT id FROM variacao WHERE esquema_id = ? AND chave = ?",
+                "SELECT id, bola_x, bola_y FROM variacao WHERE esquema_id = ? AND chave = ?",
                 (esquema_id, "padrao"),
             ).fetchone()
             if padrao is not None:
@@ -377,15 +509,27 @@ def criar_variacao(esquema_id: int, payload) -> dict:
                         (padrao["id"],),
                     )
                 ]
+                dados["bola_x"], dados["bola_y"] = padrao["bola_x"], padrao["bola_y"]
+                for campo, (tabela, colunas) in MARCACOES.items():
+                    dados[campo] = [
+                        {c: linha[c] for c in colunas}
+                        for linha in conn.execute(
+                            f"SELECT {', '.join(colunas)} FROM {tabela} "
+                            f"WHERE variacao_id = ? ORDER BY ordem, id",
+                            (padrao["id"],),
+                        )
+                    ]
         ordem = conn.execute(
             "SELECT COALESCE(MAX(ordem), -1) + 1 AS proxima FROM variacao WHERE esquema_id = ?",
             (esquema_id,),
         ).fetchone()["proxima"]
         cur = conn.execute(
-            "INSERT INTO variacao (esquema_id, chave, nome, ordem) VALUES (?, ?, ?, ?)",
-            (esquema_id, "custom", dados["nome"], ordem),
+            "INSERT INTO variacao (esquema_id, chave, nome, ordem, bola_x, bola_y) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (esquema_id, "custom", dados["nome"], ordem, dados["bola_x"], dados["bola_y"]),
         )
         _inserir_jogadores(conn, cur.lastrowid, dados["jogadores"])
+        _inserir_marcacoes(conn, cur.lastrowid, dados)
     return obter_esquema(esquema_id)
 
 
@@ -395,9 +539,15 @@ def atualizar_variacao(esquema_id: int, variacao_id: int, payload) -> dict:
         _exigir_existente(conn, esquema_id)
         linha = _exigir_variacao(conn, esquema_id, variacao_id)
         dados = validar_variacao({**(payload or {}), "chave": linha["chave"]})
-        conn.execute("UPDATE variacao SET nome = ? WHERE id = ?", (dados["nome"], variacao_id))
+        conn.execute(
+            "UPDATE variacao SET nome = ?, bola_x = ?, bola_y = ? WHERE id = ?",
+            (dados["nome"], dados["bola_x"], dados["bola_y"], variacao_id),
+        )
         conn.execute("DELETE FROM jogador WHERE variacao_id = ?", (variacao_id,))
+        for tabela, _ in MARCACOES.values():
+            conn.execute(f"DELETE FROM {tabela} WHERE variacao_id = ?", (variacao_id,))
         _inserir_jogadores(conn, variacao_id, dados["jogadores"])
+        _inserir_marcacoes(conn, variacao_id, dados)
     return obter_esquema(esquema_id)
 
 

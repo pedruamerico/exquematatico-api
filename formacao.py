@@ -1,8 +1,8 @@
 """Gera as posições de um time a partir da string de formação (ex.: '4-3-3').
 
-O campo é vertical, 0-100 em cada eixo, e o time da casa ataca para cima: o goleiro fica
-em y alto (perto da própria meta, na base) e os atacantes em y baixo. O adversário é o
-espelho vertical disso.
+O campo é horizontal, 0-100 em cada eixo, e o time da casa ataca para a direita: o goleiro
+fica em x baixo (perto da própria meta, à esquerda) e os atacantes em x alto. O adversário
+é o espelho horizontal disso.
 
 A formação lista os jogadores de linha do setor mais defensivo ao mais ofensivo, sem o
 goleiro: '4-3-3' são 4 defensores, 3 meias e 3 atacantes, totalizando 10 + goleiro.
@@ -12,11 +12,11 @@ geométrica deste módulo.
 """
 from formacoes_reais import FORMACOES
 
-GOLEIRO_Y = 94.0
+GOLEIRO_X = 6.0
 # O ataque para antes do meio-campo: sem essa folga os atacantes centrais dos dois times,
-# ambos em x = 50, ficam um por cima do outro.
-LINHA_Y_DEFESA = 86.0
-LINHA_Y_ATAQUE = 56.0
+# ambos em y = 50, ficam um por cima do outro.
+LINHA_X_DEFESA = 14.0
+LINHA_X_ATAQUE = 44.0
 
 PAPEL_GOLEIRO = "GOL"
 PAPEIS_POR_SETOR = {
@@ -56,15 +56,15 @@ def analisar(formacao: str) -> list[int]:
     return setores
 
 
-def _ys(qtd_setores: int) -> list[float]:
+def _xs_setores(qtd_setores: int) -> list[float]:
     if qtd_setores == 1:
-        return [(LINHA_Y_DEFESA + LINHA_Y_ATAQUE) / 2]
-    passo = (LINHA_Y_ATAQUE - LINHA_Y_DEFESA) / (qtd_setores - 1)
-    return [LINHA_Y_DEFESA + passo * i for i in range(qtd_setores)]
+        return [(LINHA_X_DEFESA + LINHA_X_ATAQUE) / 2]
+    passo = (LINHA_X_ATAQUE - LINHA_X_DEFESA) / (qtd_setores - 1)
+    return [LINHA_X_DEFESA + passo * i for i in range(qtd_setores)]
 
 
-def _xs(qtd: int) -> list[float]:
-    """Distribui qtd jogadores igualmente na largura, com margem nas pontas."""
+def _ys(qtd: int) -> list[float]:
+    """Distribui qtd jogadores igualmente na altura, com margem nas pontas."""
     if qtd == 1:
         return [50.0]
     margem = 15.0 if qtd <= 3 else 12.0
@@ -74,18 +74,18 @@ def _xs(qtd: int) -> list[float]:
 
 def _gerar_por_geometria(setores: list[int]) -> list[dict]:
     """Distribui os jogadores por setor, para a formação que não está em FORMACOES."""
-    jogadores = [{"numero": 1, "papel": PAPEL_GOLEIRO, "x": 50.0, "y": GOLEIRO_Y}]
+    jogadores = [{"numero": 1, "papel": PAPEL_GOLEIRO, "x": GOLEIRO_X, "y": 50.0}]
 
     papeis = PAPEIS_POR_SETOR[len(setores)]
     numero = 2
-    for indice_setor, (qtd, y) in enumerate(zip(setores, _ys(len(setores)))):
+    for indice_setor, (qtd, x) in enumerate(zip(setores, _xs_setores(len(setores)))):
         base = papeis[indice_setor]
-        xs = _xs(qtd)
-        for indice_x, x in enumerate(xs):
+        ys = _ys(qtd)
+        for indice_y, y in enumerate(ys):
             papel = base
             extremo = PAPEIS_EXTREMO.get(base)
-            if extremo and qtd >= extremo[1] and indice_x in (0, len(xs) - 1):
-                papel = extremo[0][0 if indice_x == 0 else 1]
+            if extremo and qtd >= extremo[1] and indice_y in (0, len(ys) - 1):
+                papel = extremo[0][0 if indice_y == 0 else 1]
             jogadores.append({"numero": numero, "papel": papel, "x": x, "y": y})
             numero += 1
     return jogadores
@@ -94,7 +94,7 @@ def _gerar_por_geometria(setores: list[int]) -> list[dict]:
 def gerar_time(formacao: str, adversario: bool = False) -> list[dict]:
     """Devolve 11 jogadores (goleiro + linha) posicionados conforme a formação.
 
-    Com adversario=True o time é espelhado no eixo vertical: ataca para baixo.
+    Com adversario=True o time é espelhado no eixo horizontal: ataca para a esquerda.
     """
     setores = analisar(formacao)
     reais = FORMACOES.get(formacao)
@@ -110,22 +110,22 @@ def gerar_time(formacao: str, adversario: bool = False) -> list[dict]:
     return jogadores
 
 
-# Negativo sobe o time, em direção ao gol adversário.
-DESLOCAMENTO = {"padrao": 0.0, "ofensivo": -16.0, "defensivo": 8.0}
+# Positivo avança o time da casa, em direção ao gol adversário.
+DESLOCAMENTO = {"padrao": 0.0, "ofensivo": 11.0, "defensivo": -5.5}
 
 # Espaço mínimo entre o goleiro e o jogador de linha mais recuado. A ficha ocupa cerca de
-# 4 pontos da escala, então abaixo disso as duas se sobrepõem na tela.
-FOLGA_GOLEIRO = 5.0
+# 3 pontos do eixo x, então abaixo disso as duas se sobrepõem na tela.
+FOLGA_GOLEIRO = 4.0
 
 # Distância mínima da linha central que o time mais avançado respeita. Sem ela os dois
-# times cruzam o meio-campo e os atacantes centrais, ambos em x = 50, se sobrepõem.
-FOLGA_MEIO = 4.0
+# times cruzam o meio-campo e os atacantes centrais, ambos em y = 50, se sobrepõem.
+FOLGA_MEIO = 3.0
 
 
 def aplicar_deslocamento(jogadores: list[dict], chave: str, adversario: bool = False) -> list[dict]:
-    """Move o time inteiro no eixo y, menos o goleiro, que fica na meta.
+    """Move o time inteiro no eixo x, menos o goleiro, que fica na meta.
 
-    No OFENSIVO a casa sobe e o adversário recua para proteger o gol; no DEFENSIVO a casa
+    No OFENSIVO a casa avança e o adversário recua para proteger o gol; no DEFENSIVO a casa
     recua e o adversário avança. Os dois se movem para o mesmo lado do campo, o que mantém
     a distância entre as linhas e evita que as fichas se sobreponham.
 
@@ -141,24 +141,25 @@ def aplicar_deslocamento(jogadores: list[dict], chave: str, adversario: bool = F
         # é reduzido até o mais recuado caber. Limitar um a um comprimiria as linhas e
         # empilharia volante sobre zagueiro.
         if adversario:
-            recuo = min(j["y"] for j in linha) + delta - (goleiro["y"] + FOLGA_GOLEIRO)
-            if recuo < 0:
-                delta -= recuo
-            avanco = max(j["y"] for j in linha) + delta - (50.0 - FOLGA_MEIO)
-            if avanco > 0:
-                delta -= avanco
-        else:
-            recuo = max(j["y"] for j in linha) + delta - (goleiro["y"] - FOLGA_GOLEIRO)
+            # O adversário defende à direita: recuar é crescer em x, avançar é diminuir.
+            recuo = max(j["x"] for j in linha) + delta - (goleiro["x"] - FOLGA_GOLEIRO)
             if recuo > 0:
                 delta -= recuo
-            avanco = min(j["y"] for j in linha) + delta - (50.0 + FOLGA_MEIO)
+            avanco = min(j["x"] for j in linha) + delta - (50.0 + FOLGA_MEIO)
             if avanco < 0:
+                delta -= avanco
+        else:
+            recuo = min(j["x"] for j in linha) + delta - (goleiro["x"] + FOLGA_GOLEIRO)
+            if recuo < 0:
+                delta -= recuo
+            avanco = max(j["x"] for j in linha) + delta - (50.0 - FOLGA_MEIO)
+            if avanco > 0:
                 delta -= avanco
 
     copia = []
     for j in jogadores:
         novo = dict(j)
         if novo["papel"] != PAPEL_GOLEIRO:
-            novo["y"] = round(min(100.0, max(0.0, novo["y"] + delta)), 1)
+            novo["x"] = round(min(100.0, max(0.0, novo["x"] + delta)), 1)
         copia.append(novo)
     return copia

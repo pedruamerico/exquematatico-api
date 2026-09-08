@@ -37,7 +37,7 @@ variações fixas, geradas a partir da formação:
 | Variação  | Chave       | O que representa                                  |
 | --------- | ----------- | ------------------------------------------------- |
 | Padrão    | `padrao`    | Os dois times em suas metades, formação neutra    |
-| Ofensivo  | `ofensivo`  | O time da casa sobe; o adversário recua           |
+| Ofensivo  | `ofensivo`  | O time da casa avança; o adversário recua          |
 | Defensivo | `defensivo` | O time da casa recua; o adversário avança         |
 
 Além dessas, o usuário adiciona quantas variações **personalizadas** quiser (chave `custom`,
@@ -51,6 +51,22 @@ coordenadas `x`/`y`.
 é o canto superior esquerdo e `(100, 100)` o inferior direito. Por serem percentuais, o
 quadro é independente do tamanho da tela. Um jogador com `em_campo: false` está no banco, e
 aí `x` e `y` são nulos.
+
+O campo é horizontal, na proporção 111 x 72. A casa defende à esquerda (goleiro em `x = 6`) e
+ataca para a direita; o adversário é o espelho, com o goleiro em `x = 94`.
+
+Além dos jogadores, a variação guarda a **bola** (`{"x": ..., "y": ...}`, no centro por
+padrão) e três camadas de marcação tática, todas opcionais e nas mesmas coordenadas
+percentuais:
+
+| Camada      | Conteúdo                                                              |
+| ----------- | --------------------------------------------------------------------- |
+| `desenhos`  | Setas: `tipo` `mov` (movimentação) ou `passe`, com `x1`/`y1`/`x2`/`y2` |
+| `zonas`     | Retângulos: `time` (`casa`, `visitante`, `neutra`), `x`, `y`, `largura`, `altura` |
+| `anotacoes` | Notas curtas: `texto` (até 40 caracteres), `x`, `y`                   |
+
+As três são substituídas por inteiro a cada PUT da variação: o payload é o estado final, não
+um delta. Enviar a variação sem uma delas esvazia aquela camada.
 
 O limite é de 11 jogadores em campo por time. É permitido salvar com menos, para o usuário
 montar o esquema aos poucos.
@@ -160,12 +176,16 @@ Para reposicionar, envie a variação inteira no PUT:
 {
   "nome": "Padrão",
   "casa": [
-    {"numero": 1, "papel": "GOL", "em_campo": true, "x": 50, "y": 94},
+    {"numero": 1, "papel": "GOL", "em_campo": true, "x": 6, "y": 50},
     {"numero": 12, "papel": "ATA", "em_campo": false, "x": null, "y": null}
   ],
   "visitante": [
-    {"numero": 1, "papel": "GOL", "em_campo": true, "x": 50, "y": 6}
-  ]
+    {"numero": 1, "papel": "GOL", "em_campo": true, "x": 94, "y": 50}
+  ],
+  "bola": {"x": 12, "y": 50},
+  "desenhos": [{"tipo": "passe", "x1": 13.6, "y1": 81.5, "x2": 28.8, "y2": 66.8}],
+  "zonas": [{"time": "casa", "x": 4, "y": 30, "largura": 22, "altura": 40}],
+  "anotacoes": [{"texto": "Zagueiro abre", "x": 18, "y": 24}]
 }
 ```
 

@@ -196,28 +196,47 @@ class TestFormacao(unittest.TestCase):
             with self.subTest(chave=chave):
                 movido = formacao_mod.aplicar_deslocamento(base, chave)
                 self.assertEqual(movido[0]["papel"], "GOL")
-                self.assertEqual(movido[0]["y"], base[0]["y"])
+                self.assertEqual(movido[0]["x"], base[0]["x"])
 
-    def test_ofensivo_sobe_o_time_da_casa(self):
+    def test_ofensivo_avanca_o_time_da_casa(self):
         base = formacao_mod.gerar_time("4-3-3")
         movido = formacao_mod.aplicar_deslocamento(base, "ofensivo")
-        linha_base = [j["y"] for j in base if j["papel"] != "GOL"]
-        linha_movida = [j["y"] for j in movido if j["papel"] != "GOL"]
-        self.assertLess(sum(linha_movida), sum(linha_base), "y menor = mais perto do gol adversário")
+        linha_base = [j["x"] for j in base if j["papel"] != "GOL"]
+        linha_movida = [j["x"] for j in movido if j["papel"] != "GOL"]
+        self.assertGreater(sum(linha_movida), sum(linha_base), "x maior = mais perto do gol adversário")
+
+    def test_ofensivo_recua_o_adversario(self):
+        base = formacao_mod.gerar_time("4-3-3", adversario=True)
+        movido = formacao_mod.aplicar_deslocamento(base, "ofensivo", adversario=True)
+        linha_base = [j["x"] for j in base if j["papel"] != "GOL"]
+        linha_movida = [j["x"] for j in movido if j["papel"] != "GOL"]
+        self.assertGreater(sum(linha_movida), sum(linha_base), "o adversário recua para a própria meta")
 
     def test_linha_nao_ultrapassa_o_goleiro_ao_recuar(self):
         base = formacao_mod.gerar_time("4-3-3")
         movido = formacao_mod.aplicar_deslocamento(base, "defensivo")
         goleiro = next(j for j in movido if j["papel"] == "GOL")
-        mais_recuado = max(j["y"] for j in movido if j["papel"] != "GOL")
-        self.assertLess(mais_recuado, goleiro["y"])
+        mais_recuado = min(j["x"] for j in movido if j["papel"] != "GOL")
+        self.assertGreater(mais_recuado, goleiro["x"])
+
+    def test_adversario_nao_ultrapassa_o_proprio_goleiro(self):
+        base = formacao_mod.gerar_time("4-3-3", adversario=True)
+        movido = formacao_mod.aplicar_deslocamento(base, "ofensivo", adversario=True)
+        goleiro = next(j for j in movido if j["papel"] == "GOL")
+        mais_recuado = max(j["x"] for j in movido if j["papel"] != "GOL")
+        self.assertLess(mais_recuado, goleiro["x"])
 
     def test_times_nao_cruzam_o_meio_campo(self):
-        casa = formacao_mod.aplicar_deslocamento(
-            formacao_mod.gerar_time("4-3-3"), "ofensivo"
-        )
-        avancado = min(j["y"] for j in casa if j["papel"] != "GOL")
-        self.assertGreater(avancado, 50.0 - formacao_mod.FOLGA_MEIO - 0.1)
+        for chave in ("padrao", "ofensivo", "defensivo"):
+            with self.subTest(chave=chave):
+                casa = formacao_mod.aplicar_deslocamento(formacao_mod.gerar_time("4-3-3"), chave)
+                adv = formacao_mod.aplicar_deslocamento(
+                    formacao_mod.gerar_time("4-3-3", adversario=True), chave, adversario=True
+                )
+                avancado = max(j["x"] for j in casa if j["papel"] != "GOL")
+                self.assertLess(avancado, 50.0 + formacao_mod.FOLGA_MEIO + 0.1)
+                avancado_adv = min(j["x"] for j in adv if j["papel"] != "GOL")
+                self.assertGreater(avancado_adv, 50.0 - formacao_mod.FOLGA_MEIO - 0.1)
 
 
 class TestCriarEsquema(BancoTemporario):
@@ -471,6 +490,153 @@ class TestVariacoes(BancoTemporario):
                 "SELECT COUNT(*) c FROM jogador WHERE variacao_id = ?", (nova_id,)
             ).fetchone()["c"]
         self.assertEqual(restantes, 0)
+
+
+class TestValidacaoMarcacoes(unittest.TestCase):
+    def variacao(self, **extra) -> dict:
+        return services.validar_variacao({"chave": "custom", "nome": "V", **extra})
+
+    def test_bola_ausente_fica_no_centro(self):
+        dados = self.variacao()
+        self.assertEqual((dados["bola_x"], dados["bola_y"]), services.BOLA_PADRAO)
+
+    def test_aceita_bola_posicionada(self):
+        dados = self.variacao(bola={"x": 12.5, "y": 80})
+        self.assertEqual((dados["bola_x"], dados["bola_y"]), (12.5, 80.0))
+
+    def test_recusa_bola_fora_do_campo(self):
+        with self.assertRaises(services.ErroValidacao):
+            self.variacao(bola={"x": 120, "y": 50})
+
+    def test_aceita_desenhos(self):
+        dados = self.variacao(desenhos=[
+            {"tipo": "mov", "x1": 10, "y1": 20, "x2": 30, "y2": 40},
+            {"tipo": "passe", "x1": 1, "y1": 2, "x2": 3, "y2": 4},
+        ])
+        self.assertEqual([d["tipo"] for d in dados["desenhos"]], ["mov", "passe"])
+
+    def test_recusa_tipo_de_desenho_invalido(self):
+        with self.assertRaises(services.ErroValidacao):
+            self.variacao(desenhos=[{"tipo": "curva", "x1": 1, "y1": 2, "x2": 3, "y2": 4}])
+
+    def test_recusa_desenho_fora_do_campo(self):
+        with self.assertRaises(services.ErroValidacao):
+            self.variacao(desenhos=[{"tipo": "mov", "x1": 1, "y1": 2, "x2": 101, "y2": 4}])
+
+    def test_aceita_zona(self):
+        dados = self.variacao(zonas=[{"time": "casa", "x": 10, "y": 10, "largura": 20, "altura": 30}])
+        self.assertEqual(dados["zonas"][0]["time"], "casa")
+
+    def test_zona_sem_time_e_neutra(self):
+        dados = self.variacao(zonas=[{"x": 10, "y": 10, "largura": 20, "altura": 30}])
+        self.assertEqual(dados["zonas"][0]["time"], "neutra")
+
+    def test_recusa_zona_menor_que_o_minimo(self):
+        with self.assertRaises(services.ErroValidacao):
+            self.variacao(zonas=[{"x": 10, "y": 10, "largura": 0.5, "altura": 30}])
+
+    def test_recusa_zona_que_ultrapassa_o_campo(self):
+        with self.assertRaises(services.ErroValidacao):
+            self.variacao(zonas=[{"x": 90, "y": 10, "largura": 20, "altura": 30}])
+
+    def test_aceita_anotacao(self):
+        dados = self.variacao(anotacoes=[{"texto": "Troca de lado", "x": 40, "y": 60}])
+        self.assertEqual(dados["anotacoes"][0]["texto"], "Troca de lado")
+
+    def test_recusa_anotacao_vazia(self):
+        with self.assertRaises(services.ErroValidacao):
+            self.variacao(anotacoes=[{"texto": "   ", "x": 40, "y": 60}])
+
+    def test_recusa_anotacao_longa_demais(self):
+        with self.assertRaises(services.ErroValidacao):
+            self.variacao(anotacoes=[{"texto": "x" * 41, "x": 40, "y": 60}])
+
+
+class TestMarcacoesPersistem(BancoTemporario):
+    def setUp(self):
+        super().setUp()
+        self.esquema = services.criar_esquema(esquema_valido())
+        self.variacao_id = self.esquema["variacoes"][0]["id"]
+
+    def gravar(self, **extra) -> dict:
+        return services.atualizar_variacao(
+            self.esquema["id"], self.variacao_id, {"nome": "Padrão", **extra}
+        )
+
+    def primeira(self, esquema: dict) -> dict:
+        return next(v for v in esquema["variacoes"] if v["id"] == self.variacao_id)
+
+    def test_variacao_nasce_com_bola_no_centro(self):
+        for v in self.esquema["variacoes"]:
+            self.assertEqual(v["bola"], {"x": 50.0, "y": 50.0})
+
+    def test_grava_e_le_bola(self):
+        salva = self.primeira(self.gravar(bola={"x": 20, "y": 75}))
+        self.assertEqual(salva["bola"], {"x": 20.0, "y": 75.0})
+
+    def test_grava_e_le_marcacoes(self):
+        salva = self.primeira(self.gravar(
+            desenhos=[{"tipo": "mov", "x1": 10, "y1": 20, "x2": 30, "y2": 40}],
+            zonas=[{"time": "casa", "x": 5, "y": 5, "largura": 20, "altura": 25}],
+            anotacoes=[{"texto": "Segunda bola", "x": 60, "y": 30}],
+        ))
+        self.assertEqual(salva["desenhos"], [{"tipo": "mov", "x1": 10.0, "y1": 20.0, "x2": 30.0, "y2": 40.0}])
+        self.assertEqual(salva["zonas"][0]["largura"], 20.0)
+        self.assertEqual(salva["anotacoes"][0]["texto"], "Segunda bola")
+
+    def test_preserva_a_ordem_dos_desenhos(self):
+        salva = self.primeira(self.gravar(desenhos=[
+            {"tipo": "mov", "x1": 1, "y1": 1, "x2": 2, "y2": 2},
+            {"tipo": "passe", "x1": 3, "y1": 3, "x2": 4, "y2": 4},
+            {"tipo": "mov", "x1": 5, "y1": 5, "x2": 6, "y2": 6},
+        ]))
+        self.assertEqual([d["x1"] for d in salva["desenhos"]], [1.0, 3.0, 5.0])
+
+    def test_regravar_substitui_as_marcacoes(self):
+        self.gravar(desenhos=[{"tipo": "mov", "x1": 1, "y1": 1, "x2": 2, "y2": 2}])
+        salva = self.primeira(self.gravar())
+        self.assertEqual(salva["desenhos"], [], "o payload sem desenhos esvazia a camada")
+
+    def test_marcacoes_nao_vazam_entre_variacoes(self):
+        self.gravar(desenhos=[{"tipo": "mov", "x1": 1, "y1": 1, "x2": 2, "y2": 2}])
+        outras = [v for v in services.obter_esquema(self.esquema["id"])["variacoes"]
+                  if v["id"] != self.variacao_id]
+        for v in outras:
+            self.assertEqual(v["desenhos"], [])
+
+    def test_excluir_variacao_leva_as_marcacoes(self):
+        com_nova = services.criar_variacao(self.esquema["id"], {"nome": "Escanteio"})
+        nova_id = com_nova["variacoes"][-1]["id"]
+        services.atualizar_variacao(self.esquema["id"], nova_id, {
+            "nome": "Escanteio",
+            "zonas": [{"x": 5, "y": 5, "largura": 10, "altura": 10}],
+        })
+        services.excluir_variacao(self.esquema["id"], nova_id)
+        with database.conexao() as conn:
+            restantes = conn.execute(
+                "SELECT COUNT(*) c FROM zona WHERE variacao_id = ?", (nova_id,)
+            ).fetchone()["c"]
+        self.assertEqual(restantes, 0, "ON DELETE CASCADE alcança as marcações")
+
+    def test_variacao_nova_copia_as_marcacoes_do_padrao(self):
+        self.gravar(
+            bola={"x": 30, "y": 30},
+            desenhos=[{"tipo": "passe", "x1": 1, "y1": 1, "x2": 9, "y2": 9}],
+        )
+        com_nova = services.criar_variacao(self.esquema["id"], {"nome": "Cópia"})
+        nova = com_nova["variacoes"][-1]
+        self.assertEqual(nova["bola"], {"x": 30.0, "y": 30.0})
+        self.assertEqual(len(nova["desenhos"]), 1)
+
+    def test_duplicar_esquema_leva_as_marcacoes(self):
+        self.gravar(
+            bola={"x": 15, "y": 85},
+            anotacoes=[{"texto": "Pressão", "x": 20, "y": 20}],
+        )
+        copia = services.duplicar_esquema(self.esquema["id"])
+        primeira = copia["variacoes"][0]
+        self.assertEqual(primeira["bola"], {"x": 15.0, "y": 85.0})
+        self.assertEqual(primeira["anotacoes"][0]["texto"], "Pressão")
 
 
 if __name__ == "__main__":

@@ -11,20 +11,24 @@ import services
 from database import init_db
 
 EXEMPLO_CASA = [
-    {"numero": 1, "papel": "GOL", "em_campo": True, "x": 50, "y": 94},
-    {"numero": 2, "papel": "LE", "em_campo": True, "x": 12, "y": 78},
-    {"numero": 9, "papel": "PONTA", "em_campo": True, "x": 12, "y": 20},
+    {"numero": 1, "papel": "GOL", "em_campo": True, "x": 6, "y": 50},
+    {"numero": 2, "papel": "LE", "em_campo": True, "x": 13.6, "y": 81.5},
+    {"numero": 9, "papel": "PONTA", "em_campo": True, "x": 36.4, "y": 16.4},
     {"numero": 12, "papel": "ATA", "em_campo": False, "x": None, "y": None},
 ]
 EXEMPLO_VISITANTE = [
-    {"numero": 1, "papel": "GOL", "em_campo": True, "x": 50, "y": 6},
-    {"numero": 2, "papel": "LE", "em_campo": True, "x": 88, "y": 22},
+    {"numero": 1, "papel": "GOL", "em_campo": True, "x": 94, "y": 50},
+    {"numero": 2, "papel": "LE", "em_campo": True, "x": 86.4, "y": 18.5},
 ]
 EXEMPLO_VARIACAO_IN = {
     "chave": "custom",
     "nome": "Saída de bola",
     "casa": EXEMPLO_CASA,
     "visitante": EXEMPLO_VISITANTE,
+    "bola": {"x": 12, "y": 50},
+    "desenhos": [{"tipo": "passe", "x1": 13.6, "y1": 81.5, "x2": 28.8, "y2": 66.8}],
+    "zonas": [{"time": "casa", "x": 4, "y": 30, "largura": 22, "altura": 40}],
+    "anotacoes": [{"texto": "Zagueiro abre", "x": 18, "y": 24}],
 }
 EXEMPLO_VARIACAO_OUT = {"id": 1, **EXEMPLO_VARIACAO_IN}
 EXEMPLO_ESQUEMA_IN = {
@@ -49,17 +53,49 @@ class Jogador(BaseModel):
     y: Optional[float] = Field(None, description="% vertical do centro da ficha (0 = topo)")
 
 
+class Bola(BaseModel):
+    x: float = Field(50, description="% horizontal, 0 a 100")
+    y: float = Field(50, description="% vertical, 0 a 100")
+
+
+class Desenho(BaseModel):
+    tipo: str = Field(..., description="mov (movimentação) | passe")
+    x1: float = Field(..., description="Origem, % horizontal")
+    y1: float = Field(..., description="Origem, % vertical")
+    x2: float = Field(..., description="Destino, % horizontal")
+    y2: float = Field(..., description="Destino, % vertical")
+
+
+class Zona(BaseModel):
+    time: str = Field("neutra", description="casa | visitante | neutra")
+    x: float = Field(..., description="Canto superior esquerdo, % horizontal")
+    y: float = Field(..., description="Canto superior esquerdo, % vertical")
+    largura: float = Field(..., description="Largura em % do campo")
+    altura: float = Field(..., description="Altura em % do campo")
+
+
+class Anotacao(BaseModel):
+    texto: str = Field(..., description="Texto curto, até 40 caracteres")
+    x: float = Field(..., description="% horizontal")
+    y: float = Field(..., description="% vertical")
+
+
 class VariacaoIn(BaseModel):
     chave: str = Field("custom", description="padrao | ofensivo | defensivo | custom")
     nome: Optional[str] = Field(None, description="Nome livre; as fixas usam o nome padrão")
     casa: list[Jogador] = Field(default_factory=list, description="Time da casa, até 11 em campo")
     visitante: list[Jogador] = Field(default_factory=list, description="Adversário, até 11 em campo")
+    bola: Optional[Bola] = Field(None, description="Posição da bola; omitida, fica no centro")
+    desenhos: list[Desenho] = Field(default_factory=list, description="Setas de movimentação e passe")
+    zonas: list[Zona] = Field(default_factory=list, description="Zonas táticas retangulares")
+    anotacoes: list[Anotacao] = Field(default_factory=list, description="Notas ancoradas no campo")
     model_config = {"json_schema_extra": {"example": EXEMPLO_VARIACAO_IN}}
 
 
 class VariacaoOut(VariacaoIn):
     id: int
     nome: str
+    bola: Bola
     model_config = {"json_schema_extra": {"example": EXEMPLO_VARIACAO_OUT}}
 
 
