@@ -1,5 +1,5 @@
 """ExquemaTatico API - quadro tático de futebol. Rotas finas; regras em services.py."""
-from typing import Optional
+from typing import Literal, Optional
 
 from flask import jsonify, make_response, redirect
 from flask_cors import CORS
@@ -46,43 +46,48 @@ EXEMPLO_ESQUEMA_OUT = {
 
 
 class Jogador(BaseModel):
-    numero: int = Field(..., description="Número da camisa (1-99), único no time")
-    papel: str = Field(..., description="Papel tático curto (GOL, ZAG, PONTA...)")
+    numero: int = Field(..., ge=1, le=99, description="Número da camisa, único no time")
+    papel: str = Field(..., min_length=1, max_length=12,
+                       description="Papel tático curto (GOL, ZAG, PONTA...)")
     em_campo: bool = Field(True, description="Falso coloca o jogador no banco; x e y ficam nulos")
-    x: Optional[float] = Field(None, description="% horizontal do centro da ficha (0 = esquerda)")
-    y: Optional[float] = Field(None, description="% vertical do centro da ficha (0 = topo)")
+    x: Optional[float] = Field(None, ge=0, le=100,
+                               description="% horizontal do centro da ficha (0 = esquerda)")
+    y: Optional[float] = Field(None, ge=0, le=100,
+                               description="% vertical do centro da ficha (0 = topo)")
 
 
 class Bola(BaseModel):
-    x: float = Field(50, description="% horizontal, 0 a 100")
-    y: float = Field(50, description="% vertical, 0 a 100")
+    x: float = Field(50, ge=0, le=100, description="% horizontal")
+    y: float = Field(50, ge=0, le=100, description="% vertical")
 
 
 class Desenho(BaseModel):
-    tipo: str = Field(..., description="mov (movimentação) | passe")
-    x1: float = Field(..., description="Origem, % horizontal")
-    y1: float = Field(..., description="Origem, % vertical")
-    x2: float = Field(..., description="Destino, % horizontal")
-    y2: float = Field(..., description="Destino, % vertical")
+    tipo: Literal["mov", "passe"] = Field(..., description="Movimentação ou linha de passe")
+    x1: float = Field(..., ge=0, le=100, description="Origem, % horizontal")
+    y1: float = Field(..., ge=0, le=100, description="Origem, % vertical")
+    x2: float = Field(..., ge=0, le=100, description="Destino, % horizontal")
+    y2: float = Field(..., ge=0, le=100, description="Destino, % vertical")
 
 
 class Zona(BaseModel):
-    time: str = Field("neutra", description="casa | visitante | neutra")
-    x: float = Field(..., description="Canto superior esquerdo, % horizontal")
-    y: float = Field(..., description="Canto superior esquerdo, % vertical")
-    largura: float = Field(..., description="Largura em % do campo")
-    altura: float = Field(..., description="Altura em % do campo")
+    time: Literal["casa", "visitante", "neutra"] = Field("neutra", description="Dono da zona")
+    x: float = Field(..., ge=0, le=100, description="Canto superior esquerdo, % horizontal")
+    y: float = Field(..., ge=0, le=100, description="Canto superior esquerdo, % vertical")
+    largura: float = Field(..., gt=0, le=100, description="Largura em % do campo")
+    altura: float = Field(..., gt=0, le=100, description="Altura em % do campo")
 
 
 class Anotacao(BaseModel):
-    texto: str = Field(..., description="Texto curto, até 40 caracteres")
-    x: float = Field(..., description="% horizontal")
-    y: float = Field(..., description="% vertical")
+    texto: str = Field(..., min_length=1, max_length=40, description="Texto curto")
+    x: float = Field(..., ge=0, le=100, description="% horizontal")
+    y: float = Field(..., ge=0, le=100, description="% vertical")
 
 
 class VariacaoIn(BaseModel):
-    chave: str = Field("custom", description="padrao | ofensivo | defensivo | custom")
-    nome: Optional[str] = Field(None, description="Nome livre; as fixas usam o nome padrão")
+    chave: Literal["padrao", "ofensivo", "defensivo", "custom"] = Field(
+        "custom", description="As três fixas nascem com o esquema; novas são 'custom'")
+    nome: Optional[str] = Field(None, max_length=60,
+                                description="Nome livre; as fixas usam o nome padrão")
     casa: list[Jogador] = Field(default_factory=list, description="Time da casa, até 11 em campo")
     visitante: list[Jogador] = Field(default_factory=list, description="Adversário, até 11 em campo")
     bola: Optional[Bola] = Field(None, description="Posição da bola; omitida, fica no centro")
@@ -100,10 +105,11 @@ class VariacaoOut(VariacaoIn):
 
 
 class EsquemaIn(BaseModel):
-    nome: str
-    formacao: str = Field(..., description="Soma 10 jogadores de linha, ex.: 4-3-3, 4-2-3-1")
-    tipo: str = Field(..., description="ofensivo | defensivo | bola_parada")
-    anotacoes: str = ""
+    nome: str = Field(..., min_length=1, max_length=80)
+    formacao: str = Field(..., min_length=3, max_length=20,
+                          description="Soma 10 jogadores de linha, ex.: 4-3-3, 4-2-3-1")
+    tipo: Literal["ofensivo", "defensivo", "bola_parada"] = Field(..., description="Tipo do plano")
+    anotacoes: str = Field("", max_length=2000)
     variacoes: Optional[list[VariacaoIn]] = Field(
         None, description="Omitido, o esquema nasce com Padrão, Ofensivo e Defensivo da formação")
     model_config = {"json_schema_extra": {"example": EXEMPLO_ESQUEMA_IN}}
@@ -143,7 +149,8 @@ class VariacaoPath(BaseModel):
 
 
 class ListaQuery(BaseModel):
-    tipo: Optional[str] = Field(None, description="Filtra por tipo: ofensivo | defensivo | bola_parada")
+    tipo: Optional[Literal["ofensivo", "defensivo", "bola_parada"]] = Field(
+        None, description="Filtra a listagem por tipo")
 
 
 def _erro_validacao_pydantic(e: ValidationError):

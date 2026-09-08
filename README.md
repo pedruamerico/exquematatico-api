@@ -43,6 +43,11 @@ variações fixas, geradas a partir da formação:
 Além dessas, o usuário adiciona quantas variações **personalizadas** quiser (chave `custom`,
 nome livre). As três fixas não podem ser excluídas; as personalizadas sim.
 
+Um payload que traga `variacoes` explicitamente precisa conter exatamente uma `padrao`, uma
+`ofensivo` e uma `defensivo`, mais quantas `custom` quiser, com nomes distintos entre si. Como
+a API recusa excluir as fixas depois, aceitar um payload sem elas deixaria o esquema num
+estado que nenhuma rota consegue produzir nem corrigir.
+
 Cada variação tem dois times, `casa` e `visitante`, com seus **jogadores**. Um jogador tem
 `numero` (1-99, único no time), `papel` (texto curto, ex.: GOL, ZAG, PONTA), `em_campo` e as
 coordenadas `x`/`y`.
@@ -130,12 +135,18 @@ Se `python -m venv` falhar no Ubuntu/Debian, instale o pacote `python3-venv`.
 ## Testes
 
 ```powershell
-python -m unittest test_services -v
+python -m unittest discover -p "test_*.py" -v
 ```
 
-Cobrem validação de payload, geração de formação, CRUD, regeneração de variações e a
-cascata do banco. Cada teste roda num SQLite temporário próprio, então a suíte não toca o
-`exquematatico.db` de trabalho e dispensa a API no ar.
+Duas suítes:
+
+- `test_services.py` — validação de payload, geração de formação, CRUD, regeneração de
+  variações, cascata do banco e migração de um banco criado antes das colunas da bola.
+- `test_rotas.py` — as nove rotas por HTTP com `app.test_client()`: códigos de status,
+  serialização, erros em JSON, CORS para a origem `null` do `file://` e o documento OpenAPI.
+
+Cada suíte roda num SQLite temporário próprio, então nenhuma toca o `exquematatico.db` de
+trabalho e nenhuma precisa da API no ar.
 
 ## Swagger
 

@@ -225,6 +225,35 @@ def validar_esquema(payload) -> dict:
     }
 
 
+def validar_lista_de_variacoes(variacoes) -> list:
+    """Valida a lista inteira, não só cada variação isolada.
+
+    As três fixas são o contrato do esquema — a API recusa excluí-las depois, então
+    aceitar um payload sem elas ou com uma repetida deixaria o esquema em um estado
+    que nenhuma outra rota consegue produzir nem corrigir.
+    """
+    if not isinstance(variacoes, list) or not variacoes:
+        raise ErroValidacao("O esquema deve ter ao menos uma variação.")
+
+    validadas = [validar_variacao(v) for v in variacoes]
+    chaves = [v["chave"] for v in validadas]
+    for fixa in CHAVES_FIXAS:
+        quantas = chaves.count(fixa)
+        if quantas == 0:
+            raise ErroValidacao(
+                f"Falta a variação '{NOMES_FIXOS[fixa]}'. As três fixas são obrigatórias."
+            )
+        if quantas > 1:
+            raise ErroValidacao(
+                f"A variação '{NOMES_FIXOS[fixa]}' aparece {quantas} vezes; deve ser única."
+            )
+
+    nomes_custom = [v["nome"] for v in validadas if v["chave"] == "custom"]
+    if len(set(nomes_custom)) != len(nomes_custom):
+        raise ErroValidacao("Duas variações personalizadas não podem ter o mesmo nome.")
+    return validadas
+
+
 def _inserir_jogadores(conn, variacao_id: int, jogadores: list) -> None:
     conn.executemany(
         "INSERT INTO jogador (variacao_id, time, numero, papel, em_campo, x, y) "
@@ -379,9 +408,7 @@ def criar_esquema(payload) -> dict:
     if variacoes is None:
         variacoes = _variacoes_iniciais(dados["formacao"])
     else:
-        if not isinstance(variacoes, list) or not variacoes:
-            raise ErroValidacao("O esquema deve ter ao menos uma variação.")
-        variacoes = [validar_variacao(v) for v in variacoes]
+        variacoes = validar_lista_de_variacoes(variacoes)
 
     with conexao() as conn:
         cur = conn.execute(
@@ -425,9 +452,7 @@ def atualizar_esquema(esquema_id: int, payload) -> dict:
     dados = validar_esquema(payload)
     variacoes = payload.get("variacoes")
     if variacoes is not None:
-        if not isinstance(variacoes, list) or not variacoes:
-            raise ErroValidacao("O esquema deve ter ao menos uma variação.")
-        variacoes = [validar_variacao(v) for v in variacoes]
+        variacoes = validar_lista_de_variacoes(variacoes)
 
     with conexao() as conn:
         atual = conn.execute(

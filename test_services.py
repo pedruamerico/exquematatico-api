@@ -257,15 +257,49 @@ class TestCriarEsquema(BancoTemporario):
         self.assertNotEqual(criado["criado_em"], "1999-01-01T00:00:00+00:00")
 
     def test_aceita_variacoes_explicitas(self):
-        criado = services.criar_esquema(
-            esquema_valido(variacoes=[{"chave": "custom", "nome": "Só essa", "casa": [jogador(1)]}])
-        )
-        self.assertEqual(len(criado["variacoes"]), 1)
-        self.assertEqual(criado["variacoes"][0]["nome"], "Só essa")
+        criado = services.criar_esquema(esquema_valido(variacoes=[
+            {"chave": "padrao", "casa": [jogador(1)]},
+            {"chave": "ofensivo"}, {"chave": "defensivo"},
+            {"chave": "custom", "nome": "Escanteio", "casa": [jogador(7)]},
+        ]))
+        self.assertEqual(len(criado["variacoes"]), 4)
+        self.assertEqual(criado["variacoes"][-1]["nome"], "Escanteio")
+        self.assertEqual([j["numero"] for j in criado["variacoes"][0]["casa"]], [1])
 
     def test_recusa_lista_de_variacoes_vazia(self):
         with self.assertRaises(services.ErroValidacao):
             services.criar_esquema(esquema_valido(variacoes=[]))
+
+    def test_recusa_payload_sem_as_tres_fixas(self):
+        with self.assertRaises(services.ErroValidacao):
+            services.criar_esquema(esquema_valido(variacoes=[{"chave": "custom", "nome": "Só essa"}]))
+
+    def test_recusa_payload_faltando_uma_fixa(self):
+        with self.assertRaises(services.ErroValidacao):
+            services.criar_esquema(esquema_valido(
+                variacoes=[{"chave": "padrao"}, {"chave": "ofensivo"}]))
+
+    def test_recusa_chave_fixa_repetida(self):
+        with self.assertRaises(services.ErroValidacao):
+            services.criar_esquema(esquema_valido(variacoes=[
+                {"chave": "padrao", "nome": "A"}, {"chave": "padrao", "nome": "B"},
+                {"chave": "ofensivo"}, {"chave": "defensivo"},
+            ]))
+
+    def test_recusa_personalizadas_com_o_mesmo_nome(self):
+        with self.assertRaises(services.ErroValidacao):
+            services.criar_esquema(esquema_valido(variacoes=[
+                {"chave": "padrao"}, {"chave": "ofensivo"}, {"chave": "defensivo"},
+                {"chave": "custom", "nome": "Escanteio"}, {"chave": "custom", "nome": "Escanteio"},
+            ]))
+
+    def test_aceita_as_tres_fixas_mais_personalizadas(self):
+        criado = services.criar_esquema(esquema_valido(variacoes=[
+            {"chave": "padrao"}, {"chave": "ofensivo"}, {"chave": "defensivo"},
+            {"chave": "custom", "nome": "Escanteio"},
+        ]))
+        self.assertEqual([v["chave"] for v in criado["variacoes"]],
+                         ["padrao", "ofensivo", "defensivo", "custom"])
 
 
 class TestLeitura(BancoTemporario):
@@ -313,11 +347,12 @@ class TestAtualizarEsquema(BancoTemporario):
 
     def test_substitui_variacoes_quando_vem_no_payload(self):
         criado = services.criar_esquema(esquema_valido())
-        atualizado = services.atualizar_esquema(
-            criado["id"],
-            esquema_valido(variacoes=[{"chave": "padrao", "nome": "Padrão", "casa": [jogador(1)]}]),
-        )
-        self.assertEqual(len(atualizado["variacoes"]), 1)
+        atualizado = services.atualizar_esquema(criado["id"], esquema_valido(variacoes=[
+            {"chave": "padrao", "nome": "Padrão", "casa": [jogador(1)]},
+            {"chave": "ofensivo"}, {"chave": "defensivo"},
+        ]))
+        self.assertEqual(len(atualizado["variacoes"]), 3)
+        self.assertEqual([j["numero"] for j in atualizado["variacoes"][0]["casa"]], [1])
 
     def test_inexistente(self):
         with self.assertRaises(services.NaoEncontrado):
@@ -357,11 +392,15 @@ class TestAtualizarEsquema(BancoTemporario):
             criado["id"],
             esquema_valido(
                 formacao="3-5-2",
-                variacoes=[{"chave": "padrao", "nome": "Padrão", "casa": [jogador(4)]}],
+                variacoes=[
+                    {"chave": "padrao", "nome": "Padrão", "casa": [jogador(4)]},
+                    {"chave": "ofensivo"}, {"chave": "defensivo"},
+                ],
             ),
         )
-        self.assertEqual(len(atualizado["variacoes"]), 1)
-        self.assertEqual([j["numero"] for j in atualizado["variacoes"][0]["casa"]], [4])
+        self.assertEqual(len(atualizado["variacoes"]), 3)
+        self.assertEqual([j["numero"] for j in atualizado["variacoes"][0]["casa"]], [4],
+                         "o payload explícito vence a regeneração pela formação")
 
 
 class TestExcluirEsquema(BancoTemporario):
