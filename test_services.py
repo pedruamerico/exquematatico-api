@@ -3,6 +3,7 @@
 Cada teste roda contra um banco temporário próprio: database.DB_PATH é reapontado no
 setUp, antes de init_db(). Sem isso a suíte escreveria no exquematatico.db de trabalho.
 """
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -490,6 +491,62 @@ class TestVariacoes(BancoTemporario):
                 "SELECT COUNT(*) c FROM jogador WHERE variacao_id = ?", (nova_id,)
             ).fetchone()["c"]
         self.assertEqual(restantes, 0)
+
+
+SCHEMA_LEGADO = """
+CREATE TABLE esquema (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL, formacao TEXT NOT NULL,
+    tipo TEXT NOT NULL, anotacoes TEXT DEFAULT '', criado_em TEXT NOT NULL);
+CREATE TABLE variacao (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    esquema_id INTEGER NOT NULL REFERENCES esquema(id) ON DELETE CASCADE,
+    chave TEXT NOT NULL, nome TEXT NOT NULL, ordem INTEGER NOT NULL);
+CREATE TABLE jogador (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    variacao_id INTEGER NOT NULL REFERENCES variacao(id) ON DELETE CASCADE,
+    time TEXT NOT NULL, numero INTEGER NOT NULL, papel TEXT NOT NULL,
+    em_campo INTEGER NOT NULL DEFAULT 1, x REAL, y REAL);
+INSERT INTO esquema (nome, formacao, tipo, criado_em)
+    VALUES ('Antigo', '4-3-3', 'ofensivo', '2026-01-01T00:00:00+00:00');
+INSERT INTO variacao (esquema_id, chave, nome, ordem) VALUES (1, 'padrao', 'Padrão', 0);
+INSERT INTO jogador (variacao_id, time, numero, papel, em_campo, x, y)
+    VALUES (1, 'casa', 1, 'GOL', 1, 6, 50);
+"""
+
+
+class TestMigracaoDeBancoAntigo(unittest.TestCase):
+    """Um banco criado antes das colunas da bola precisa continuar abrindo."""
+
+    def setUp(self):
+        self._dir = tempfile.TemporaryDirectory()
+        caminho = Path(self._dir.name) / "legado.db"
+        conn = sqlite3.connect(caminho)
+        conn.executescript(SCHEMA_LEGADO)
+        conn.commit()
+        conn.close()
+        database.DB_PATH = caminho
+
+    def tearDown(self):
+        self._dir.cleanup()
+
+    def test_init_db_acrescenta_as_colunas_da_bola(self):
+        database.init_db()
+        with database.conexao() as conn:
+            colunas = {linha["name"] for linha in conn.execute("PRAGMA table_info(variacao)")}
+        self.assertIn("bola_x", colunas)
+        self.assertIn("bola_y", colunas)
+
+    def test_le_o_esquema_antigo_sem_erro(self):
+        database.init_db()
+        esquema = services.listar_esquemas()[0]
+        self.assertEqual(esquema["nome"], "Antigo")
+        self.assertEqual(esquema["variacoes"][0]["bola"], {"x": 50.0, "y": 50.0})
+        self.assertEqual(esquema["variacoes"][0]["casa"][0]["papel"], "GOL")
+
+    def test_migracao_e_idempotente(self):
+        database.init_db()
+        database.init_db()
+        self.assertEqual(len(services.listar_esquemas()), 1)
 
 
 class TestValidacaoMarcacoes(unittest.TestCase):

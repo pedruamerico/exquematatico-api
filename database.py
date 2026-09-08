@@ -104,6 +104,27 @@ def conexao():
         conn.close()
 
 
+# Colunas acrescentadas depois da primeira versão do schema. CREATE TABLE IF NOT EXISTS
+# não altera tabela existente, então um banco antigo precisa recebê-las por ALTER.
+COLUNAS_NOVAS = {
+    "variacao": (
+        ("bola_x", "REAL NOT NULL DEFAULT 50"),
+        ("bola_y", "REAL NOT NULL DEFAULT 50"),
+    ),
+}
+
+
+def _migrar(conn) -> None:
+    for tabela, colunas in COLUNAS_NOVAS.items():
+        existentes = {linha["name"] for linha in conn.execute(f"PRAGMA table_info({tabela})")}
+        if not existentes:
+            continue
+        for nome, definicao in colunas:
+            if nome not in existentes:
+                conn.execute(f"ALTER TABLE {tabela} ADD COLUMN {nome} {definicao}")
+
+
 def init_db() -> None:
     with conexao() as conn:
+        _migrar(conn)
         conn.executescript(SCHEMA)
