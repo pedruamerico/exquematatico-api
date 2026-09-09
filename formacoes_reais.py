@@ -5,6 +5,8 @@ defendendo à esquerda. O adversário é o espelho destas coordenadas.
 
 As faixas de x seguem as mesmas linhas em todas as formações (13.6 defesa, 21.2 e 28.8
 meio, 36.4 e 44.0 ataque), o que mantém os setores alinhados entre esquemas diferentes.
+O atacante central sozinho fica em 40.0: em 44.0 ele encostaria no espelho do adversário,
+que ocupa a mesma faixa de y.
 Formação que não estiver aqui cai na regra geométrica de formacao.py.
 """
 
@@ -20,7 +22,7 @@ FORMACOES = {
         {"numero": 8, "papel": "MC", "x": 28.8, "y": 66.8},
         {"numero": 9, "papel": "PD", "x": 36.4, "y": 16.4},
         {"numero": 10, "papel": "PE", "x": 36.4, "y": 83.6},
-        {"numero": 11, "papel": "ATA", "x": 44.0, "y": 50.0},
+        {"numero": 11, "papel": "ATA", "x": 40.0, "y": 50.0},
     ],
     "4-4-2": [
         {"numero": 1, "papel": "GOL", "x": 6.0, "y": 50.0},
@@ -46,7 +48,7 @@ FORMACOES = {
         {"numero": 8, "papel": "PD", "x": 36.4, "y": 16.4},
         {"numero": 9, "papel": "MEI", "x": 36.4, "y": 50.0},
         {"numero": 10, "papel": "PE", "x": 36.4, "y": 83.6},
-        {"numero": 11, "papel": "ATA", "x": 44.0, "y": 50.0},
+        {"numero": 11, "papel": "ATA", "x": 40.0, "y": 50.0},
     ],
     "3-5-2": [
         {"numero": 1, "papel": "GOL", "x": 6.0, "y": 50.0},
@@ -85,6 +87,6 @@ FORMACOES = {
         {"numero": 8, "papel": "MC", "x": 28.8, "y": 39.5},
         {"numero": 9, "papel": "MC", "x": 28.8, "y": 60.5},
         {"numero": 10, "papel": "ME", "x": 28.8, "y": 81.5},
-        {"numero": 11, "papel": "ATA", "x": 44.0, "y": 50.0},
+        {"numero": 11, "papel": "ATA", "x": 40.0, "y": 50.0},
     ],
 }
